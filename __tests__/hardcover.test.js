@@ -42,7 +42,7 @@ test('fetchUserBooks flattens the response', async () => {
       userBookId: 7,
       bookId: 2312000,
       statusId: 2,
-      statusId: 2,
+      title: 'The Butcher of Nazareth',
       myRating: null,
       myReview: '',
       mySpoilers: false,
