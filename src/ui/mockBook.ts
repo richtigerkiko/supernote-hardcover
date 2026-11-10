@@ -1,7 +1,9 @@
 // Mock detail data for designing the page on the emulator. It is the real Hardcover record of The Butcher of Nazareth
 // (book 2312000, fetched 2026-11-09 with books_by_pk { title subtitle release_year rating ratings_count reviews_count
 // image { url } cached_tags description } and its editions; cached_tags groups the tags by category: Genre, Mood, Tag).
-export const MOCK_BOOK = {
+import type {BookDetail} from './DetailPage';
+
+export const MOCK_BOOK: BookDetail = {
   title: 'The Butcher of Nazareth',
   subtitle: 'A Novel',
   authors: ['David Scott Hay'],
@@ -26,7 +28,7 @@ export const MOCK_BOOK = {
 };
 
 // A worst case for the layout: long title, several authors, many chips, no cover, no rating, long description.
-export const MOCK_LONG = {
+export const MOCK_LONG: BookDetail = {
   title: 'The Extraordinarily Long Title of a Remarkably Wordy Book About Almost Nothing in Particular',
   subtitle: 'A Complete and Unabridged Account in Three Volumes',
   authors: ['Alexandra Montgomery-Featherstonehaugh', 'Christopher Wolfeschlegelsteinhausenbergerdorff'],

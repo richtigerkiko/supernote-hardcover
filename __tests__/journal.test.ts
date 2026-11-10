@@ -6,9 +6,9 @@ describe('journalPosition', () => {
   });
 
   test('the first page is never page 0, the last is the edition page count', () => {
-    expect(journalPosition(0, 1000, 288).value).toBe(1);
+    expect(journalPosition(0, 1000, 288)?.value).toBe(1);
     expect(journalPosition(999, 1000, 288)).toMatchObject({value: 288, percent: 100});
-    expect(journalPosition(1200, 1000, 288).value).toBe(288);
+    expect(journalPosition(1200, 1000, 288)?.value).toBe(288);
   });
 
   test('null when it cannot be computed', () => {

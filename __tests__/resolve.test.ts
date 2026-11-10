@@ -1,15 +1,15 @@
+import type {EpubMeta} from '../src/epub';
+import type {ReadingItem} from '../src/hardcover';
 import {isbnsIn} from '../src/match';
 import {resolveBook} from '../src/resolve';
 
 // Metadata, book ids and ISBNs below are the real ones: read from the real EPUBs, checked live on Hardcover.
-const READING = [
-  {bookId: 383598, title: 'Circe', authors: ['Madeline Miller']},
-  {bookId: 2312000, title: 'The Butcher of Nazareth', authors: ['David Scott Hay']},
-];
-const KNOWN = {9781668287323: 2312000, 9781668287309: 2312000, 9781250899569: 1197330, 9783961610747: 383598};
+const item = (bookId: number, title: string, authors: string[]): ReadingItem => ({userBookId: bookId, bookId, statusId: 2, title, authors, editionId: null, editionPages: null, read: null});
+const READING = [item(383598, 'Circe', ['Madeline Miller']), item(2312000, 'The Butcher of Nazareth', ['David Scott Hay'])];
+const KNOWN: Record<string, number> = {9781668287323: 2312000, 9781668287309: 2312000, 9781250899569: 1197330, 9783961610747: 383598};
 
-const run = async meta => {
-  const lookups = [];
+const run = async (meta: EpubMeta) => {
+  const lookups: string[][] = [];
   const hit = await resolveBook({
     meta,
     reading: READING,
@@ -29,13 +29,13 @@ test('isbnsIn finds ISBN-13s in hyphenated identifiers and drops invalid checksu
 
 test('Butcher: its e-ISBN and print ISBN both lead to the book being read', async () => {
   const {hit, lookups} = await run({title: 'The Butcher of Nazareth', creator: 'David S. Hay', ids: ['calibre:4', '9781668287323'], pageBreakSource: '9781668287309'});
-  expect(hit.title).toBe('The Butcher of Nazareth');
+  expect(hit?.title).toBe('The Butcher of Nazareth');
   expect(lookups).toEqual([['9781668287323', '9781668287309']]);
 });
 
 test('Circe: the EPUB ISBN is a typo and unknown to Hardcover, so title and author decide', async () => {
   const {hit} = await run({title: 'Ich bin Circe', creator: 'Madeline Miller', ids: ['9783961610741', '9783961610741']});
-  expect(hit.title).toBe('Circe');
+  expect(hit?.title).toBe('Circe');
 });
 
 test('a known ISBN of a book that is not being read gives null, even if the title would match something', async () => {

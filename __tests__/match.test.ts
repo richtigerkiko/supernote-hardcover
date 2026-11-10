@@ -24,9 +24,9 @@ test.each(BOOKS)('%s / %s', (title, author, expected) => {
 });
 
 test('EPUB metadata text matches the same way, including diacritics', () => {
-  expect(matchBook('Ich bin Circe Madeline Miller', READING).title).toBe('Circe');
-  expect(matchBook('Der Steppenwolf Hermann Hesse', READING).title).toBe('Steppenwolf');
-  expect(matchBook('Circé Miller', READING).title).toBe('Circe');
+  expect(matchBook('Ich bin Circe Madeline Miller', READING)!.title).toBe('Circe');
+  expect(matchBook('Der Steppenwolf Hermann Hesse', READING)!.title).toBe('Steppenwolf');
+  expect(matchBook('Circé Miller', READING)!.title).toBe('Circe');
 });
 
 test('a short title needs the author too, so a stray word does not match', () => {
@@ -56,7 +56,7 @@ describe('toPages', () => {
     expect(toPages(5, 0, 330)).toBeNull();
     expect(toPages(5, 332, null)).toBeNull();
     expect(toPages(-1, 332, 330)).toBeNull();
-    expect(toPages(undefined, 332, 330)).toBeNull();
+    expect(toPages(undefined as unknown as number, 332, 330)).toBeNull();
   });
 });
 
@@ -65,6 +65,6 @@ test('overlapping titles by one author: the longer title wins when the file has 
     {title: 'Dune', authors: ['Frank Herbert']},
     {title: 'Dune Messiah', authors: ['Frank Herbert']},
   ];
-  expect(matchBook('Dune Messiah Frank Herbert', list).title).toBe('Dune Messiah');
-  expect(matchBook('Dune Frank Herbert', list).title).toBe('Dune');
+  expect(matchBook('Dune Messiah Frank Herbert', list)!.title).toBe('Dune Messiah');
+  expect(matchBook('Dune Frank Herbert', list)!.title).toBe('Dune');
 });

@@ -7,7 +7,7 @@ import EditionPicker, {edLine1} from './EditionPicker';
 // Same e-ink rules: black on white, borders instead of greys, tap targets of at least 48 dp, text of at least 18 sp.
 
 type Privacy = 1 | 2 | 3;
-type Entry = {event: 'quote' | 'note'; passage: string; text: string; privacy: Privacy};
+export type Entry = {event: 'quote' | 'note'; passage: string; text: string; privacy: Privacy};
 
 type Props = {
   book: BookDetail;

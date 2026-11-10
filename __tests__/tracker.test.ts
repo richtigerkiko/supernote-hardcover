@@ -1,14 +1,25 @@
-import {createTracker, stepOf, STEP_PERCENT} from '../src/tracker';
+import type {ReadingItem, ReadRecord} from '../src/hardcover';
+import {createTracker, stepOf, STEP_PERCENT, type TrackerDeps} from '../src/tracker';
 
-const BUTCHER = {title: 'The Butcher of Nazareth', editionPages: 330};
+const BUTCHER: ReadingItem = {
+  userBookId: 7,
+  bookId: 2312000,
+  statusId: 2,
+  title: 'The Butcher of Nazareth',
+  authors: ['David Scott Hay'],
+  editionId: 32560293,
+  editionPages: 330,
+  read: null,
+};
+const readOf = (id: number): ReadRecord => ({id, started_at: null, finished_at: null, progress_pages: null, edition_id: null});
 const PATH = '/Document/ebooks/butcher.epub';
 const TOTAL = 332;
 // with 2% steps and 332 reader pages one step is 6.64 pages: index 81 (page 82, 24.7%) is step 12, index 86 (page 87, 26.2%) step 13
 
-const setup = ({item = BUTCHER, pushFails} = {}) => {
+const setup = ({item = BUTCHER, pushFails}: {item?: ReadingItem | null; pushFails?: string} = {}) => {
   let t = 1_000_000;
-  const pushes = [];
-  const resolves = [];
+  const pushes: number[] = [];
+  const resolves: string[] = [];
   const tracker = createTracker({
     now: () => t,
     resolve: async path => (resolves.push(path), item),
@@ -17,10 +28,10 @@ const setup = ({item = BUTCHER, pushFails} = {}) => {
       pushes.push(pages);
     },
   });
-  return {tracker, pushes, resolves, advance: ms => (t += ms)};
+  return {tracker, pushes, resolves, advance: (ms: number) => (t += ms)};
 };
-const at = (page, total = TOTAL, path = PATH) => ({path, page, total});
-const edition = (page, total = TOTAL) => Math.round(((page + 1) / total) * 330);
+const at = (page: number, total = TOTAL, path = PATH) => ({path, page, total});
+const edition = (page: number, total = TOTAL) => Math.round(((page + 1) / total) * 330);
 
 test('steps: 2% of the book, the last page is the last step', () => {
   expect(STEP_PERCENT).toBe(2);
@@ -96,7 +107,7 @@ test('an unidentified book is looked up again after the negative TTL, not before
 test('a failed push keeps the page and is retried after a pause, also from a touch with no usable sample', async () => {
   let t = 1_000_000;
   let fail = true;
-  const pushes = [];
+  const pushes: number[] = [];
   const tracker = createTracker({
     now: () => t,
     resolve: async () => BUTCHER,
@@ -107,7 +118,7 @@ test('a failed push keeps the page and is retried after a pause, also from a tou
   });
   await tracker.tick(at(81));
   await tracker.tick(at(86)); // crossing: push fails
-  expect(tracker.state.lastError.message).toMatch(/500/);
+  expect(tracker.state.lastError?.message).toMatch(/500/);
   expect(pushes).toEqual([]);
   fail = false;
   t += 1000;
@@ -121,7 +132,7 @@ test('a failed push keeps the page and is retried after a pause, also from a tou
 test('a rate limit (429, by status) waits longer than another error', async () => {
   let t = 1_000_000;
   let fail = true;
-  const pushes = [];
+  const pushes: number[] = [];
   const tracker = createTracker({
     now: () => t,
     resolve: async () => BUTCHER,
@@ -142,18 +153,18 @@ test('a rate limit (429, by status) waits longer than another error', async () =
 });
 
 test('without a page count in the edition nothing is pushed and the problem is reported', async () => {
-  const {tracker, pushes} = setup({item: {title: 'X', editionPages: null}});
+  const {tracker, pushes} = setup({item: {...BUTCHER, title: 'X', editionPages: null}});
   await tracker.tick(at(81));
   await tracker.tick(at(86));
   expect(pushes).toEqual([]);
-  expect(tracker.state.lastError.message).toMatch(/no page count/);
+  expect(tracker.state.lastError?.message).toMatch(/no page count/);
 });
 
 test('a lookup that throws (offline) leaves no state, so the next tick tries again', async () => {
   let calls = 0;
   const t = createTracker({resolve: async () => { if (++calls === 1) throw new Error('offline'); return BUTCHER; }, push: async () => {}});
   await t.tick(at(81));
-  expect(t.state.lastError.message).toBe('offline');
+  expect(t.state.lastError?.message).toBe('offline');
   await t.tick(at(81));
   expect(calls).toBe(2);
 });
@@ -183,11 +194,11 @@ describe('reflow', () => {
 test('a hung tick does not block later ones forever', async () => {
   let t = 1_000_000;
   let hang = true;
-  const pushes = [];
+  const pushes: number[] = [];
   const tracker = createTracker({
     now: () => t,
-    resolve: async () => (hang ? new Promise(() => {}) : BUTCHER), // the first lookup never returns
-    push: async (it, pages) => pushes.push(pages),
+    resolve: async () => (hang ? new Promise<ReadingItem>(() => {}) : BUTCHER), // the first lookup never returns
+    push: async (_it, pages) => void pushes.push(pages),
   });
   tracker.tick(at(81)); // hangs, never awaited
   hang = false;
@@ -201,18 +212,18 @@ test('a hung tick does not block later ones forever', async () => {
 });
 
 describe('re-check of matched books', () => {
-  const run = (resolveFn, pushFn) => {
+  const run = (resolveFn: TrackerDeps['resolve'], pushFn: TrackerDeps['push']) => {
     let t = 1_000_000;
     const tracker = createTracker({now: () => t, resolve: resolveFn, push: pushFn});
-    return {tracker, advance: ms => (t += ms)};
+    return {tracker, advance: (ms: number) => (t += ms)};
   };
 
   test('after the interval a matched book picks up a new read id', async () => {
-    let item = {...BUTCHER, read: {id: 1}};
-    const used = [];
-    const {tracker, advance} = run(async () => item, async it => used.push(it.read.id));
+    let item: ReadingItem = {...BUTCHER, read: readOf(1)};
+    const used: number[] = [];
+    const {tracker, advance} = run(async () => item, async it => void used.push(it.read!.id));
     await tracker.tick(at(81));
-    item = {...BUTCHER, read: {id: 2}};
+    item = {...BUTCHER, read: readOf(2)};
     advance(601_000);
     await tracker.tick(at(81)); // re-checked, same step
     await tracker.tick(at(86));
@@ -220,9 +231,9 @@ describe('re-check of matched books', () => {
   });
 
   test('a book that left the list while a push was failing stops pushing without an error', async () => {
-    let item = BUTCHER;
+    let item: ReadingItem | null = BUTCHER;
     let fail = true;
-    const pushes = [];
+    const pushes: number[] = [];
     const {tracker, advance} = run(async () => item, async (it, pages) => {
       if (fail) throw new Error('Hardcover HTTP 500');
       pushes.push(pages);
@@ -234,7 +245,7 @@ describe('re-check of matched books', () => {
     advance(601_000);
     await tracker.tick(at(86));
     expect(pushes).toEqual([]);
-    expect(tracker.state.lastError.message).toMatch(/500/); // the old one, no new "push(null)" error
+    expect(tracker.state.lastError?.message).toMatch(/500/); // the old one, no new "push(null)" error
     advance(61_000);
     await tracker.tick(null);
     expect(pushes).toEqual([]);
@@ -242,8 +253,8 @@ describe('re-check of matched books', () => {
 
   test('a failed re-check keeps pushing with the old item and is not retried on every touch', async () => {
     let calls = 0;
-    const pushes = [];
-    const {tracker, advance} = run(async () => { if (++calls > 1) throw new Error('offline'); return BUTCHER; }, async (it, pages) => pushes.push(pages));
+    const pushes: number[] = [];
+    const {tracker, advance} = run(async () => { if (++calls > 1) throw new Error('offline'); return BUTCHER; }, async (_it, pages) => void pushes.push(pages));
     await tracker.tick(at(81));
     advance(601_000);
     await tracker.tick(at(81)); // re-check throws
@@ -257,18 +268,18 @@ test('errors and the last push name the file they belong to', async () => {
   const {tracker} = setup({pushFails: 'Hardcover HTTP 500'});
   await tracker.tick(at(81));
   await tracker.tick(at(86));
-  expect(tracker.state.lastError.path).toBe(PATH);
+  expect(tracker.state.lastError?.path).toBe(PATH);
 });
 
 test('a lookup error names the file, and a push that settles after the book left the list does not throw', async () => {
   let t = 1_000_000;
-  let item = BUTCHER;
-  let release;
+  let item: ReadingItem | null | 'offline' = BUTCHER;
+  let release: (() => void) | undefined;
   let slow = false;
   const tracker = createTracker({
     now: () => t,
     resolve: async () => { if (item === 'offline') throw new Error('offline'); return item; },
-    push: async () => { if (slow) await new Promise(r => (release = r)); },
+    push: async () => { if (slow) await new Promise<void>(r => (release = r)); },
   });
   await tracker.tick(at(81));
   t += 601_000;
@@ -277,7 +288,7 @@ test('a lookup error names the file, and a push that settles after the book left
   expect(tracker.state.lastError).toMatchObject({message: 'offline', path: PATH});
   item = BUTCHER;
   await tracker.tick(at(86)); // pushes, fast
-  expect(tracker.state.lastPush.path).toBe(PATH);
+  expect(tracker.state.lastPush?.path).toBe(PATH);
   slow = true;
   const hung = tracker.tick(at(111)); // crossing: a push that hangs
   while (!release) await Promise.resolve(); // until the push is hanging
@@ -285,7 +296,7 @@ test('a lookup error names the file, and a push that settles after the book left
   item = null;
   t += 601_000;
   await tracker.tick(at(111));
-  release();
+  release?.();
   await hung;
   expect(tracker.state.lastError).toBeNull(); // the late push counts as done; no TypeError from b.item being null by now
 });
