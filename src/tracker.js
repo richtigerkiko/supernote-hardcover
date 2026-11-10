@@ -17,7 +17,7 @@ const BUSY_EXPIRY_MS = 60_000;
 // resolve(path) -> reading item | null; push(item, pages) -> Promise; both are injected.
 // tick(sample) takes {path, page (0-based), total} or null when the reader gave nothing usable (a note, the screen
 // asleep). It is called at touches (no timers run in some lifecycle states); a null sample still retries a failed push.
-export const stepOf = (page, total) => Math.floor((Math.min(page + 1, total) / total) * (100 / STEP_PERCENT));
+export const stepOf = (page, total) => Math.floor((Math.min(page + 1, total) * (100 / STEP_PERCENT)) / total);
 
 export function createTracker({resolve, push, now = Date.now}) {
   const books = new Map(); // path -> {item, step (last pushed or first seen), pending: {pages, step}|null, retryAt, checkedAt}

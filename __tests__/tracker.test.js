@@ -28,6 +28,7 @@ test('steps: 2% of the book, the last page is the last step', () => {
   expect(stepOf(86, TOTAL)).toBe(13);
   expect(stepOf(TOTAL - 1, TOTAL)).toBe(50);
   expect(stepOf(5000, TOTAL)).toBe(50); // a page past the end is the end
+  expect(stepOf(28, 50)).toBe(29); // 29/50 is exactly 58%, which float division put just under
 });
 
 test('first sight of a book pushes nothing, however long you stay', async () => {
