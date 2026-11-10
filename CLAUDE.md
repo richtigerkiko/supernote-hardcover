@@ -40,6 +40,20 @@ Push from Git Bash with `MSYS_NO_PATHCONV=1` (it rewrites `/storage/...` paths),
 
 Install with Settings > Apps > Plugins > Add Plugin (not "reinstall"). Bump `versionCode` (and `versionName`/`package.json` together) every install (26 in `PluginConfig.json` now). The branch is `master`. The package is megabytes because of the native module; if you ever go back to JS-only, delete `build/` first or a stale `app.npk` is zipped into it silently. `src/token.generated.js` and `build/` are gitignored. The emulator is usually running too, so always `adb -s <serial>`.
 
+### Develop on Linux/WSL
+
+Unit tests run on Linux without any Windows tooling. Do not use the Windows node under `/mnt/c`.
+
+```bash
+# once, no sudo: Node 22 tarball into ~/.local/node, linked into ~/.local/bin (must be on PATH)
+curl -fsSLO https://nodejs.org/dist/latest-v22.x/<node-v22.x.y-linux-x64.tar.xz>   # name is listed at /dist/latest-v22.x/
+mkdir -p ~/.local/node && tar xf node-*.tar.xz -C ~/.local/node --strip-components=1
+ln -sf ~/.local/node/bin/{node,npm,npx} ~/.local/bin/
+npm ci && npx jest      # 9 suites, 94 tests pass
+```
+
+The plugin build (`npm run build`, Gradle, adb, the Nomad) is Windows/device-only. `../../.env` (the token source) is not present on this machine, so never run the build here; the tests do not need it.
+
 ## Detail page and emulator preview
 
 `src/ui/DetailPage.tsx` is the book detail page, ported from the settled design artifact: top bar with a Tracking ON/OFF toggle, progress bar with the text inside, cover and info, one-line Genre/Mood/Tags rows (pills that do not fit become a `+x` pill, measured in a hidden layer), a status button that opens a full-screen status list, an edition row that opens a full-screen edition list (editions with no page count, audiobooks included, hidden; Cancel / Use this edition), About clamped to 5 lines with Show more, and a fixed Write review bar. Presentational (props only, no SDK), black on white with borders, tap targets of at least 48 dp. The chosen edition belongs in the existing path-keyed metadata cache (`meta-cache.json`), not a new file-hash cache. `src/ui/mockBook.js` has the real Hardcover record of The Butcher of Nazareth with its editions and a worst case. Status ids: 1, 2, 3 and 5 are confirmed on the account, 4 (Paused) is not (see "How it works").
