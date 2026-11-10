@@ -169,7 +169,10 @@ const tracker = createTracker({
     await needGranted();
     log('push', item.title, pages);
     const hadRead = !!item.read;
-    await saveProgress(TOKEN, item, pages);
+    await saveProgress(TOKEN, item, pages).catch(e => {
+      grantedFlag = false; // maybe the grant is gone: the next touch asks hasPermission again
+      throw e;
+    });
     if (!hadRead) reading.at = 0; // the cached list still says read: null; fetch it again so a forget cannot insert twice
   },
 });
@@ -208,7 +211,10 @@ function onTouch() {
       return tracker.tick(on ? s : null);
     })
     .then(stopIfTokenRejected)
-    .catch(e => log('touch error', String(e)))
+    .catch(e => {
+      grantedFlag = false; // maybe the grant is gone: the next touch asks hasPermission again
+      log('touch error', String(e));
+    })
     .finally(() => {
       if (sampling === t) sampling = 0;
     });
