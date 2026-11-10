@@ -280,7 +280,9 @@ session.api = {
     const meta = await metaFor(s.path);
     if (meta.failed) return {message: "Could not read this EPUB's title and author."};
     if (!item) return {message: 'This book is not on your Hardcover Currently Reading list.'};
-    const editionIds = [item.editionId, meta.edition?.id].filter(Boolean);
+    // resolvePath applied the saved edition to item, so the reading entry's own edition comes from the cached list
+    const entry = reading.list.find(r => r.userBookId === item.userBookId);
+    const editionIds = [...new Set([entry?.editionId, meta.edition?.id].filter(Boolean))];
     const book = await withTimeout(fetchBookDetail(TOKEN, item.bookId, editionIds), 20_000, 'book details');
     const detail = buildDetail({book, item, saved: meta.edition, sample: s, isbns: isbnsIn((meta.ids ?? []).join(' '))});
     current = {path: s.path, item, detail};
