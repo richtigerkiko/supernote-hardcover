@@ -57,7 +57,7 @@ test('withEdition swaps edition id and pages on the item and its read, and ignor
 });
 
 test('status ids', () => {
-  expect(STATUS_ID).toEqual({'Currently reading': 2, Paused: 4, 'Did not finish': 5, Finished: 3});
+  expect(STATUS_ID).toEqual({'Want to read': 1, 'Currently reading': 2, Paused: 4, 'Did not finish': 5, Finished: 3});
 });
 
 test('an edition without a page count is never the default: it falls through to one that has pages', () => {

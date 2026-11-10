@@ -37,7 +37,7 @@ export type BookDetail = {
   editionIsbn?: boolean; // the file's own ISBN names this edition
 };
 
-export const STATUSES = ['Currently reading', 'Paused', 'Did not finish', 'Finished'];
+export const STATUSES = ['Want to read', 'Currently reading', 'Paused', 'Did not finish', 'Finished'];
 
 type Props = {
   book: BookDetail;

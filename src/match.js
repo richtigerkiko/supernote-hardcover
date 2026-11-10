@@ -9,7 +9,7 @@ const words = s =>
     .split(/[^a-z0-9]+/)
     .filter(Boolean);
 
-// Finds which Currently Reading book a file is, from its EPUB title + author.
+// Finds which of the reader's books a file is, from its EPUB title + author.
 // A book matches when every meaningful word of its Hardcover title appears in the text AND an author's
 // surname appears (or the title has 3+ meaningful words). This is the fallback for when no ISBN settles it
 // (see resolve.js). Returns the single best match, or null when none or ambiguous.

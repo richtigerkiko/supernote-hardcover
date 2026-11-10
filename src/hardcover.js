@@ -1,8 +1,7 @@
 const URL = 'https://api.hardcover.app/v1/graphql';
-const CURRENTLY_READING = 2; // user_books.status_id
 
-const QUERY_READING = `query { me { user_books(where: {status_id: {_eq: ${CURRENTLY_READING}}}) {
-  id book_id edition_id
+const QUERY_READING = `query { me { user_books {
+  id book_id edition_id status_id
   book { title contributions(limit: 5) { author { name } } }
   edition { id pages }
   user_book_reads(order_by: {id: desc}, limit: 1) { id started_at finished_at progress_pages edition_id }
@@ -26,12 +25,13 @@ async function gql(token, query, variables) {
   return json.data;
 }
 
-// Currently Reading books, flattened to what matching and saving need.
-export async function fetchCurrentlyReading(token) {
+// Every book on the reader's shelves (any status), flattened to what matching and saving need.
+export async function fetchUserBooks(token) {
   const data = await gql(token, QUERY_READING);
   return data.me[0].user_books.map(u => ({
     userBookId: u.id,
     bookId: u.book_id,
+    statusId: u.status_id,
     title: u.book.title,
     authors: u.book.contributions.map(c => c.author.name),
     editionId: u.edition_id ?? u.edition?.id ?? null,
