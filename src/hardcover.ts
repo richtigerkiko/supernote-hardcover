@@ -159,3 +159,36 @@ export async function fetchBookDetail(token: string, bookId: number, editionIds:
 export async function setStatus(token: string, userBookId: number, statusId: UserBookStatus): Promise<void> {
   await sdk(token).library.setStatus(userBookId, statusId);
 }
+
+// ---- the whole catalogue (for a book that is not in the library yet) ----
+export interface CatalogueBook {
+  bookId: number;
+  title: string;
+  authors: string[];
+}
+
+// Editions with these ISBN-13s anywhere on Hardcover.
+export async function editionsForIsbns(token: string, isbns: string[]): Promise<{id: number; bookId: number}[]> {
+  return (await sdk(token).books.findByIsbn(isbns)).map(e => ({id: e.id, bookId: e.bookId}));
+}
+
+export async function searchBooks(token: string, query: string): Promise<CatalogueBook[]> {
+  const {hits} = await sdk(token).search.books(query, {perPage: 10});
+  return hits.map(h => ({bookId: h.id, title: h.title, authors: h.authorNames ?? []}));
+}
+
+// Having the EPUB means owning the book: mark one of its editions as owned (Owned list only, no library entry; checked
+// 2026-11-10), then add the book. A library entry cannot be made without a status: the server gives Want to Read
+// (checked 2026-11-10), so this is only called for a book with no entry yet. `imported` keeps it out of followers' feeds.
+// The edition is also put on the new entry, and returned so the caller can use its page count for this file.
+// shortcut: with no ISBN match the owned edition is the first one with a page count, else the first; upgrade if it matters.
+export async function addOwned(token: string, bookId: number, editionId?: number): Promise<{id: number; pages: number | null}> {
+  const c = sdk(token);
+  const listed = editionId ? [] : (await c.books.editions(bookId, {limit: EDITIONS_SHOWN})).items;
+  const edition = editionId ? await c.books.edition(editionId) : (listed.find(e => (e.pages ?? 0) > 0) ?? listed[0]);
+  // Nothing to own means nothing is written: an unowned entry would never be retried, it is found in the library next time.
+  if (!edition) throw new Error('Hardcover has no edition of this book to mark as owned');
+  await c.library.markOwned(edition.id); // safe to repeat, so a failed add below can simply be retried
+  await c.library.add(bookId, {imported: true, editionId: edition.id});
+  return {id: edition.id, pages: edition.pages ?? null};
+}

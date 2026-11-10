@@ -12,11 +12,22 @@ import {isbnsIn} from './match';
 import {buildDetail, STATUS_ID, withEdition} from './detail';
 import {session, type Sample, type SessionApi} from './session';
 import {cleanQuote} from './quote';
-import {resolveBook} from './resolve';
+import {catalogueBook, resolveBook} from './resolve';
 import {createJsonFile, createMetaCache, type FileMeta, type NativeFs} from './store';
 import {createTracker} from './tracker';
 import {journalEntry, journalPosition} from './journal';
-import {bookIdsForIsbns, fetchBookDetail, fetchUserBooks, saveJournal, saveProgress, setStatus, type ReadingItem} from './hardcover';
+import {
+  addOwned,
+  bookIdsForIsbns,
+  editionsForIsbns,
+  fetchBookDetail,
+  fetchUserBooks,
+  saveJournal,
+  saveProgress,
+  searchBooks,
+  setStatus,
+  type ReadingItem,
+} from './hardcover';
 import type {BookDetail as PageBook} from './ui/DetailPage';
 
 AppRegistry.registerComponent(appName, () => App);
@@ -156,6 +167,60 @@ async function resolvePath(path: string) {
   return withEdition(item, meta.edition); // the edition the reader picked for this file, if any
 }
 
+const saveMeta = async (path: string, meta: FileMeta) => (await persistentMetaCache().catch(() => null))?.set(path, meta).catch(() => {});
+
+// The library entry for a catalogue book, from a freshly fetched list: a failed match (missing author, ambiguous title) or
+// the cached list can hide an entry that exists, and an existing entry must never be written to here.
+async function libraryItem(bookId: number) {
+  dropReadingList();
+  return (await readingList()).find(r => r.bookId === bookId) ?? null;
+}
+
+// Having the EPUB means owning the book: add the catalogue book `link` to the library (Want to Read) with its edition
+// marked as owned, and return its library item. The edition (when it has pages) is saved for this file, so tracking
+// has a page count without a manual edition change.
+async function addToLibrary(path: string, meta: FileMeta, link: {bookId: number; editionId?: number}) {
+  let item = await libraryItem(link.bookId);
+  if (!item) {
+    const ed = await withTimeout(addOwned(TOKEN, link.bookId, link.editionId), 20_000, 'add to library');
+    if (ed.pages && !meta.edition) meta.edition = {id: ed.id, pages: ed.pages};
+    item = await libraryItem(link.bookId);
+  }
+  delete meta.linked;
+  await saveMeta(path, meta);
+  return withEdition(item, meta.edition);
+}
+
+// A book that is in no library list: find it in the whole catalogue (like KOReader's link) and remember the link per file
+// as `linked` in the metadata cache. The first time, ask whether to add it; on No the page still works for the linked
+// book, without tracking and status (they need a library entry, see CLAUDE.md). Only from a button press: a touch never
+// opens a dialog. Returns the new library item, a stub for the linked book (userBookId 0 = no library entry), or null.
+async function linkFromCatalogue(path: string): Promise<ReadingItem | null> {
+  const meta = await metaFor(path);
+  if (meta.failed) return null;
+  let link = meta.linked;
+  if (!link) {
+    const found = await withTimeout(
+      catalogueBook({meta, editionsForIsbns: i => editionsForIsbns(TOKEN, i), searchBooks: t => searchBooks(TOKEN, t)}),
+      20_000,
+      'catalogue search',
+    );
+    if (!found) return null;
+    link = found;
+    const existing = await libraryItem(link.bookId);
+    if (existing) return withEdition(existing, meta.edition); // it was on the shelves after all: nothing to ask or write
+    const book = await withTimeout(fetchBookDetail(TOKEN, link.bookId), 20_000, 'book details');
+    const yes = await dialog(`"${book.title}" is not in your Hardcover library. Add it as Want to Read and mark your copy as owned?`, 'No', 'Yes', false);
+    if (yes) return addToLibrary(path, meta, link);
+    meta.linked = link;
+    await saveMeta(path, meta);
+  }
+  return withEdition(
+    {userBookId: 0, bookId: link.bookId, statusId: 0, title: '', authors: [], editionId: link.editionId ?? null, editionPages: null, read: null},
+    meta.edition,
+  );
+}
+
 const tracker = createTracker({
   resolve: async path => {
     await needGranted();
@@ -261,9 +326,10 @@ const api: SessionApi = {
     if (!s) return {message: 'Open an EPUB in a document to see its Hardcover page.'};
     if (memMeta.get(s.path)?.failed) memMeta.delete(s.path); // a button press tries a failed read again
     await needPermissions();
-    const item = await withTimeout(resolvePath(s.path), 20_000, 'book lookup');
+    const found = await withTimeout(resolvePath(s.path), 20_000, 'book lookup');
     const meta = await metaFor(s.path);
     if (meta.failed) return {message: "Could not read this EPUB's title and author."};
+    const item = found ?? (await linkFromCatalogue(s.path));
     if (!item) return {message: 'This book is not in your Hardcover library.'};
     // resolvePath applied the saved edition to item, so the reading entry's own edition comes from the cached list
     const entry = reading.list.find(r => r.userBookId === item.userBookId);
@@ -272,7 +338,17 @@ const api: SessionApi = {
     const detail = buildDetail({book, item, saved: meta.edition, sample: s, isbns: isbnsIn((meta.ids ?? []).join(' '))});
     if (!detail.editions.some(e => e.pages > 0)) return {message: 'Hardcover has no edition with a page count for this book.'};
     if (mine === loadSeq) current = {path: s.path, item, detail, sample: s, editionId: detail.editionId};
+    if (!detail.inLibrary) return {book: detail, tracking: false, sync: 'Not in your library: tracking and status are off.'};
     return {book: detail, tracking: meta.tracking === true, sync: syncNote(s.path)};
+  },
+  // The linked book (not in the library) is added now: Want to Read, edition marked as owned. The page reloads after.
+  async addToLibrary() {
+    const c = current;
+    if (!c || c.item.userBookId) return;
+    await needPermissions();
+    const meta = await metaFor(c.path);
+    await addToLibrary(c.path, meta, meta.linked ?? {bookId: c.item.bookId});
+    tracker.forget(c.path);
   },
   // Tracking is remembered per file like the edition. Turning it on starts from the page the book is at now (nothing is
   // sent for it); turning it off drops anything not yet sent.
@@ -315,6 +391,7 @@ const api: SessionApi = {
   async setStatus(label) {
     const c = current; // a newer load may replace `current` while we wait
     if (!c) throw new Error('no book loaded');
+    if (!c.item.userBookId) throw new Error('add the book to your library first');
     await needPermissions();
     await setStatus(TOKEN, c.item.userBookId, STATUS_ID[label as keyof typeof STATUS_ID]);
     dropReadingList(); // the list is fetched again so the new status shows

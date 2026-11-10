@@ -26,6 +26,7 @@ export type BookDetail = {
   rating?: number | null; // 0-5
   ratingsCount?: number;
   reviewsCount?: number;
+  inLibrary?: boolean; // false: not on the reader's shelves, so no status and no tracking, only an Add to library button
   status: string; // one of STATUSES
   progress: number; // reading position, 0-1 of the book; the page shown follows the chosen edition
   genres: string[];
@@ -49,6 +50,7 @@ type Props = {
   onWriteReview: () => void;
   onSetStatus: (status: string) => void;
   onSetEdition: (editionId: string) => void;
+  onAddToLibrary?: () => void; // only used when book.inLibrary is false
 };
 
 const stars = (rating: number) => {
@@ -133,7 +135,8 @@ function Progress({page, total}: {page: number; total: number}) {
   );
 }
 
-export default function DetailPage({book, tracking, syncNote, onToggleTracking, onClose, onWriteReview, onSetStatus, onSetEdition}: Props) {
+export default function DetailPage({book, tracking, syncNote, onToggleTracking, onClose, onWriteReview, onSetStatus, onSetEdition, onAddToLibrary}: Props) {
+  const inLibrary = book.inLibrary !== false;
   const [view, setView] = useState<'detail' | 'status' | 'editions'>('detail');
   const [aboutOpen, setAboutOpen] = useState(false);
   const [aboutLong, setAboutLong] = useState(false);
@@ -172,17 +175,19 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
         <Pressable accessibilityRole="button" accessibilityLabel="Close" style={styles.close} onPress={onClose}>
           <Text style={styles.closeText}>✕</Text>
         </Pressable>
-        <View style={styles.trackingBox}>
-          <Text style={styles.trackingLabel}>Tracking is</Text>
-          <Pressable
-            accessibilityRole="switch"
-            accessibilityState={{checked: tracking}}
-            accessibilityLabel="Hardcover tracking"
-            style={[styles.toggle, tracking && styles.toggleOn]}
-            onPress={onToggleTracking}>
-            <Text style={[styles.toggleText, tracking && styles.toggleTextOn]}>{tracking ? 'ON' : 'OFF'}</Text>
-          </Pressable>
-        </View>
+        {inLibrary ? (
+          <View style={styles.trackingBox}>
+            <Text style={styles.trackingLabel}>Tracking is</Text>
+            <Pressable
+              accessibilityRole="switch"
+              accessibilityState={{checked: tracking}}
+              accessibilityLabel="Hardcover tracking"
+              style={[styles.toggle, tracking && styles.toggleOn]}
+              onPress={onToggleTracking}>
+              <Text style={[styles.toggleText, tracking && styles.toggleTextOn]}>{tracking ? 'ON' : 'OFF'}</Text>
+            </Pressable>
+          </View>
+        ) : null}
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -246,9 +251,15 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
       </ScrollView>
 
       <View style={styles.actions}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Change reading status" style={styles.action} onPress={() => setView('status')}>
-          <Text style={styles.actionText}>{`${book.status} ▾`}</Text>
-        </Pressable>
+        {inLibrary ? (
+          <Pressable accessibilityRole="button" accessibilityLabel="Change reading status" style={styles.action} onPress={() => setView('status')}>
+            <Text style={styles.actionText}>{`${book.status} ▾`}</Text>
+          </Pressable>
+        ) : (
+          <Pressable accessibilityRole="button" accessibilityLabel="Add to library" style={styles.action} onPress={onAddToLibrary}>
+            <Text style={styles.actionText}>Add to library</Text>
+          </Pressable>
+        )}
         <Pressable accessibilityRole="button" style={styles.action} onPress={onWriteReview}>
           <Text style={styles.actionText}>Write review</Text>
         </Pressable>

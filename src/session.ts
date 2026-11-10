@@ -25,6 +25,7 @@ export interface SessionApi {
   passage(): Promise<string>;
   saveJournal(entry: Entry): Promise<void>;
   setStatus(label: string): Promise<void>;
+  addToLibrary(): Promise<void>;
   writeReview(): Promise<void>;
 }
 

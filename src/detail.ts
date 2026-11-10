@@ -64,6 +64,7 @@ export function buildDetail({
     cover: book.cachedImage?.url ?? null,
     rating: book.rating || null,
     ratingsCount: book.ratingsCount,
+    inLibrary: item.userBookId > 0, // false: linked from the catalogue only, no status or tracking
     status: (Object.keys(STATUS_ID) as (keyof typeof STATUS_ID)[]).find(k => STATUS_ID[k] === item.statusId) ?? 'Currently reading',
     progress: Math.min(1, (sample.page + 1) / sample.total),
     genres: tagNames(book.cachedTags, 'Genre'),
