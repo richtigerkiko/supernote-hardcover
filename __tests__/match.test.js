@@ -59,3 +59,12 @@ describe('toPages', () => {
     expect(toPages(undefined, 332, 330)).toBeNull();
   });
 });
+
+test('overlapping titles by one author: the longer title wins when the file has it, the short one otherwise', () => {
+  const list = [
+    {title: 'Dune', authors: ['Frank Herbert']},
+    {title: 'Dune Messiah', authors: ['Frank Herbert']},
+  ];
+  expect(matchBook('Dune Messiah Frank Herbert', list).title).toBe('Dune Messiah');
+  expect(matchBook('Dune Frank Herbert', list).title).toBe('Dune');
+});

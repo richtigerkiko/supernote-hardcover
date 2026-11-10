@@ -24,8 +24,8 @@ export function matchBook(text, candidates) {
     const needle = need.length ? need : all;
     if (!needle.length || !needle.every(w => have.has(w))) continue;
     const author = c.authors.some(a => have.has(words(a).pop()));
-    const score = author ? 2 : needle.length >= 3 ? 1 : 0;
-    if (!score) continue;
+    if (!author && needle.length < 3) continue;
+    const score = (author ? 100 : 0) + needle.length; // the longer title wins ("Dune Messiah" over "Dune")
     if (!best || score > best.score) {
       best = {candidate: c, score};
       tie = false;
