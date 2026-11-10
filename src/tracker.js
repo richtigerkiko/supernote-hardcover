@@ -13,7 +13,7 @@ const BUSY_EXPIRY_MS = 60_000;
 //    size or orientation, which reflow the book), and send your CURRENT page on the edition, not the step boundary
 //  - both directions: going back across a step pushes too, so progress follows you
 //  - no timers, no dwell, no interval: a few pages inside one step never push, so accidental turns are harmless
-//  - a book Hardcover cannot match (not Currently Reading) is never pushed
+//  - a book Hardcover cannot match (not on any of your shelves) is never pushed
 // resolve(path) -> reading item | null; push(item, pages) -> Promise; both are injected.
 // tick(sample) takes {path, page (0-based), total} or null when the reader gave nothing usable (a note, the screen
 // asleep). It is called at touches (no timers run in some lifecycle states); a null sample still retries a failed push.

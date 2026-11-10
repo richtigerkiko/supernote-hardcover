@@ -1,6 +1,6 @@
 // Hardcover user_books.status_id by the labels of the detail page. 1, 2, 3 and 5 are confirmed against the account
 // (via user_book_status); 4 (Paused) is used by no book here, so it is only known from third-party docs.
-export const STATUS_ID = {'Currently reading': 2, Paused: 4, 'Did not finish': 5, Finished: 3};
+export const STATUS_ID = {'Want to read': 1, 'Currently reading': 2, Paused: 4, 'Did not finish': 5, Finished: 3};
 
 // The edition the reader said this file is replaces the one on the reading entry, for the pages we compute and for the
 // edition id sent with each progress update.
@@ -42,7 +42,7 @@ export function buildDetail({book, item, saved, sample, isbns = []}) {
     rating: book.rating || null,
     ratingsCount: book.ratings_count,
     reviewsCount: book.reviews_count,
-    status: 'Currently reading', // only books on the Currently Reading list are shown
+    status: Object.keys(STATUS_ID).find(k => STATUS_ID[k] === item.statusId) ?? 'Currently reading',
     progress: Math.min(1, (sample.page + 1) / sample.total),
     genres: tagNames(book.cached_tags, 'Genre'),
     moods: tagNames(book.cached_tags, 'Mood'),

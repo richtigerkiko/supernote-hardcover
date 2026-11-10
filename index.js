@@ -16,7 +16,7 @@ import {cleanQuote} from './src/quote';
 import {resolveBook} from './src/resolve';
 import {createJsonFile, createMetaCache, createSettings} from './src/store';
 import {createTracker} from './src/tracker';
-import {bookIdsForIsbns, fetchBookDetail, fetchCurrentlyReading, saveProgress, saveQuote, setStatus} from './src/hardcover';
+import {bookIdsForIsbns, fetchBookDetail, fetchUserBooks, saveProgress, saveQuote, setStatus} from './src/hardcover';
 
 AppRegistry.registerComponent(appName, () => App);
 
@@ -165,7 +165,7 @@ function dropReadingList() {
 async function readingList() {
   if (Date.now() - reading.at <= READING_TTL_MS) return reading.list;
   const gen = readingGen;
-  const list = await fetchCurrentlyReading(TOKEN);
+  const list = await fetchUserBooks(TOKEN);
   if (gen === readingGen) reading = {list, at: Date.now()};
   return list;
 }
@@ -281,7 +281,7 @@ session.api = {
     const item = await withTimeout(resolvePath(s.path), 20_000, 'book lookup');
     const meta = await metaFor(s.path);
     if (meta.failed) return {message: "Could not read this EPUB's title and author."};
-    if (!item) return {message: 'This book is not on your Hardcover Currently Reading list.'};
+    if (!item) return {message: 'This book is not in your Hardcover library.'};
     // resolvePath applied the saved edition to item, so the reading entry's own edition comes from the cached list
     const entry = reading.list.find(r => r.userBookId === item.userBookId);
     const editionIds = [...new Set([entry?.editionId, meta.edition?.id].filter(Boolean))];
@@ -311,13 +311,9 @@ session.api = {
   },
   async setStatus(label) {
     const c = current; // a newer load may replace `current` while we wait
-    // Paused, Did not finish and Finished take the book off the list the plugin works from, and only hardcover.app undoes that.
-    if (label !== 'Currently reading' && !(await dialog('This takes the book off your Currently Reading list. You can only undo it on hardcover.app.', 'Cancel', 'Change', false))) {
-      throw new Error('status change cancelled');
-    }
     await needPermissions();
     await setStatus(TOKEN, c.item.userBookId, STATUS_ID[label]);
-    dropReadingList(); // the list is fetched again, so a book that left Currently Reading stops being tracked
+    dropReadingList(); // the list is fetched again so the new status shows
     tracker.forget(c.path);
   },
   writeReview: () => dialogOk('Writing a review from the device is not available yet.'),
@@ -334,7 +330,7 @@ async function onQuote() {
   if (!s) return say('Open an EPUB to save a quote.', false);
   await needPermissions();
   const item = await resolvePath(s.path).catch(() => null);
-  if (!item) return say('This book is not on your Hardcover Currently Reading list.', false);
+  if (!item) return say('This book is not in your Hardcover library.', false);
   await saveQuote(TOKEN, item, text, s.page + 1, await (await settings()).get('quotePrivacy'));
   return say(`Quote saved (page ${s.page + 1}).`, true);
 }

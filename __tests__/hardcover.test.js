@@ -1,4 +1,4 @@
-import {bookIdsForIsbns, fetchBookDetail, fetchCurrentlyReading, localDate, progressInput, saveProgress} from '../src/hardcover';
+import {bookIdsForIsbns, fetchBookDetail, fetchUserBooks, localDate, progressInput, saveProgress} from '../src/hardcover';
 
 const reply = (data, status = 200) => ({ok: status < 400, status, json: async () => ({data})});
 let calls;
@@ -17,7 +17,7 @@ const ITEM = {
   read: {id: 99, started_at: '2026-11-01', finished_at: null, progress_pages: 100, edition_id: 32560293},
 };
 
-test('fetchCurrentlyReading flattens the response', async () => {
+test('fetchUserBooks flattens the response', async () => {
   mockFetch(
     reply({
       me: [
@@ -27,6 +27,7 @@ test('fetchCurrentlyReading flattens the response', async () => {
               id: 7,
               book_id: 2312000,
               edition_id: 32560293,
+              status_id: 2,
               book: {title: 'The Butcher of Nazareth', contributions: [{author: {name: 'David Scott Hay'}}]},
               edition: {id: 32560293, pages: 330},
               user_book_reads: [{id: 99, started_at: null, finished_at: null, progress_pages: 100, edition_id: 32560293}],
@@ -36,10 +37,11 @@ test('fetchCurrentlyReading flattens the response', async () => {
       ],
     }),
   );
-  expect(await fetchCurrentlyReading('T')).toEqual([
+  expect(await fetchUserBooks('T')).toEqual([
     {
       userBookId: 7,
       bookId: 2312000,
+      statusId: 2,
       title: 'The Butcher of Nazareth',
       authors: ['David Scott Hay'],
       editionId: 32560293,
