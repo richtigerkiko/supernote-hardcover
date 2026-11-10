@@ -14,9 +14,10 @@ import {buildDetail, STATUS_ID, withEdition} from './src/detail';
 import {session} from './src/session';
 import {cleanQuote} from './src/quote';
 import {resolveBook} from './src/resolve';
-import {createJsonFile, createMetaCache, createSettings} from './src/store';
+import {createJsonFile, createMetaCache} from './src/store';
 import {createTracker} from './src/tracker';
-import {bookIdsForIsbns, fetchBookDetail, fetchUserBooks, saveProgress, saveQuote, setStatus} from './src/hardcover';
+import {journalEntry, journalPosition} from './src/journal';
+import {bookIdsForIsbns, fetchBookDetail, fetchUserBooks, saveJournal, saveProgress, setStatus} from './src/hardcover';
 
 AppRegistry.registerComponent(appName, () => App);
 
@@ -31,7 +32,6 @@ PluginManager.init();
 // Set true to log every touch event with the page seen at that moment (and keep tracking OFF so test page flipping
 // never reaches Hardcover). Used to measure the gesture behaviour recorded in CLAUDE.md.
 const DEBUG_GESTURES = false;
-const QUOTES_ENABLED = false; // flip after a controlled test confirms the journal event/metadata (see hardcover.js)
 const READING_TTL_MS = 600_000;
 const HUNG_MS = 10_000;
 const PERMS = [
@@ -120,29 +120,6 @@ async function metaFor(path) {
   return meta;
 }
 
-// Settings that must survive a reinstall live in MyStyle, which needs the FILE:WRITE grant before the first access.
-// The grant dialog needs a screen, so this is only called from a button press, never from a touch handler. The file
-// is written once with the defaults so it exists and can be edited.
-const SETTINGS_PATH = '/storage/emulated/0/MyStyle/Plugins/HardcoverSync/settings.json';
-const SETTING_DEFAULTS = {quotePrivacy: 3}; // Hardcover privacy ids: 1 public, 2 followers only, 3 private
-let settingsPromise = null;
-function settings() {
-  settingsPromise = settingsPromise || (async () => {
-    const perm = 'plugin.permission.FILE:WRITE';
-    let granted = (await PluginManager.hasPermission(perm)) === 1;
-    if (!granted) {
-      const r = await PluginManager.requestPermission(perm, 'Keep your settings when the plugin is updated.');
-      granted = r === 1 || r === 2;
-    }
-    const s = createSettings(createJsonFile(granted ? native : null, SETTINGS_PATH, SETTING_DEFAULTS), SETTING_DEFAULTS);
-    await s.set('quotePrivacy', await s.get('quotePrivacy')); // creates the file with the defaults when missing
-    return s;
-  })().catch(e => {
-    settingsPromise = null;
-    throw e;
-  });
-  return settingsPromise;
-}
 async function readMeta(path) {
   const blob = await (await fetch('file://' + path)).blob();
   const read = (o, l) =>
@@ -288,7 +265,7 @@ session.api = {
     const book = await withTimeout(fetchBookDetail(TOKEN, item.bookId, editionIds), 20_000, 'book details');
     const detail = buildDetail({book, item, saved: meta.edition, sample: s, isbns: isbnsIn((meta.ids ?? []).join(' '))});
     if (!detail.editions.some(e => e.pages > 0)) return {message: 'Hardcover has no edition with a page count for this book.'};
-    if (mine === loadSeq) current = {path: s.path, item, detail};
+    if (mine === loadSeq) current = {path: s.path, item, detail, sample: s, editionId: detail.editionId};
     return {book: detail, tracking: meta.tracking === true, sync: syncNote(s.path)};
   },
   // Tracking is remembered per file like the edition. Turning it on starts from the page the book is at now (nothing is
@@ -306,8 +283,26 @@ session.api = {
     if (!ed || !(ed.pages > 0)) return;
     const meta = await metaFor(current.path);
     meta.edition = {id: Number(ed.id), pages: ed.pages};
+    current.editionId = ed.id; // a journal entry saved after this uses the new edition too
     (await persistentMetaCache().catch(() => null))?.set(current.path, meta).catch(() => {});
     tracker.forget(current.path);
+  },
+  // The selection read when hardcover-select was pressed ('' if none or not opened from that button).
+  async passage() {
+    const p = session.selection;
+    session.selection = null;
+    return p ? p.catch(() => '') : '';
+  },
+  // One reading-journal entry for the book the page was loaded on, at the page the button was pressed on.
+  async saveJournal({event, passage, text, privacy}) {
+    const c = current;
+    const ed = c?.detail.editions.find(e => e.id === c.editionId);
+    const entry = journalEntry(event, passage, text);
+    if (!c || !entry) throw new Error('Nothing to save.');
+    await needPermissions();
+    const position = ed ? journalPosition(c.sample.page, c.sample.total, ed.pages) : null;
+    await saveJournal(TOKEN, {bookId: c.item.bookId, editionId: ed ? Number(ed.id) : null, event, entry, position, privacy});
+    log('journal', event, 'saved for', c.item.title);
   },
   async setStatus(label) {
     const c = current; // a newer load may replace `current` while we wait
@@ -319,38 +314,22 @@ session.api = {
   writeReview: () => dialogOk('Writing a review from the device is not available yet.'),
 };
 
-// ---- selection button: save the selected passage as a quote ----
-async function onQuote() {
-  const say = (tip, ok) => dialog(tip, 'OK', 'Close', ok);
-  if (!QUOTES_ENABLED) return say('Saving quotes is not switched on yet.', false);
-  const sel = await withTimeout(PluginDocAPI.getLastSelectedText(), 8_000, 'selection');
-  const text = cleanQuote(sel?.success ? sel.result : '');
-  if (!text) return say('Select some text first.', false);
-  const s = await safeSample();
-  if (!s) return say('Open an EPUB to save a quote.', false);
-  await needPermissions();
-  const item = await resolvePath(s.path).catch(() => null);
-  if (!item) return say('This book is not in your Hardcover library.', false);
-  await saveQuote(TOKEN, item, text, s.page + 1, await (await settings()).get('quotePrivacy'));
-  return say(`Quote saved (page ${s.page + 1}).`, true);
-}
-
 const icon = Image.resolveAssetSource(require('./assets/icon.png')).uri;
 PluginManager.registerButton(1, ['DOC'], {id: 100, name: 'Hardcover', icon, showType: 1});
-if (QUOTES_ENABLED) PluginManager.registerButton(3, ['DOC'], {id: 300, name: 'Save quote', icon, showType: 0});
+// Selection toolbar: opens the journal entry page (quote or note) for the selected passage.
+PluginManager.registerButton(3, ['DOC'], {id: 300, name: 'hardcover-select', icon, showType: 1});
+
+const readSelection = () =>
+  withTimeout(PluginDocAPI.getLastSelectedText(), 8_000, 'selection').then(r => cleanQuote(r?.success ? r.result : ''));
 
 PluginManager.registerButtonListener({
   onButtonPress(event) {
-    // The page (id 100) opens by itself (showType 1); read the document now, before the view is in front of it.
-    if (event.id === 100) {
-      session.pending = safeSample();
-      session.opened(); // an already mounted page loads the book that is open now
-    }
-    const job = event.id === 300 ? onQuote() : null;
-    job?.catch(e => {
-      log('button error', event.id, String(e));
-      dialog(`Hardcover: ${String(e.message ?? e)}`.slice(0, 300), 'OK', 'Close', false).catch(() => {});
-    });
+    if (event.id !== 100 && event.id !== 300) return;
+    // Both open a view by themselves (showType 1); read the document (and the selection) now, before the view covers it.
+    session.mode = event.id === 300 ? 'journal' : 'detail';
+    session.selection = event.id === 300 ? readSelection() : null;
+    session.pending = safeSample();
+    session.opened(); // an already mounted page loads the book that is open now
   },
 });
 log('boot', tokenOk ? 'tracking per book (default off)' : 'debug gestures', native ? 'native module ok' : 'native module MISSING');

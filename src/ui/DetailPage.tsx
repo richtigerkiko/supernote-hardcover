@@ -1,5 +1,6 @@
 import React, {useState} from 'react';
 import {Image, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import EditionPicker, {Item, TopBar, edLine1, edLine2} from './EditionPicker';
 
 // Book detail page, ported from the design artifact. Presentational only: no SDK imports, everything arrives as props,
 // so it can be designed on the emulator with mock data and unit tested. E-ink rules: black on white, no animation,
@@ -54,9 +55,6 @@ const stars = (rating: number) => {
   const full = Math.round(rating);
   return '★'.repeat(full) + '☆'.repeat(5 - full);
 };
-
-const edLine1 = (e: Edition) => `${e.format} · ${e.publisher}`;
-const edLine2 = (e: Edition) => `${e.year ? `${e.year} · ` : ''}${e.pages} pages · ${e.lang}`;
 
 const CHIP_GAP = 6;
 const PILL_WIDTH = 52; // "+99" at 18 sp, border and padding included
@@ -135,29 +133,8 @@ function Progress({page, total}: {page: number; total: number}) {
   );
 }
 
-function TopBar({title, onBack}: {title: string; onBack: () => void}) {
-  return (
-    <View style={styles.topBar}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Back" style={styles.close} onPress={onBack}>
-        <Text style={styles.closeText}>←</Text>
-      </Pressable>
-      <Text style={styles.trackingLabel}>{title}</Text>
-    </View>
-  );
-}
-
-function Item({on, onPress, children}: {on: boolean; onPress: () => void; children: React.ReactNode}) {
-  return (
-    <Pressable accessibilityRole="radio" accessibilityState={{checked: on}} style={[styles.item, on && styles.itemOn]} onPress={onPress}>
-      <View style={styles.radio}>{on ? <View style={styles.radioDot} /> : null}</View>
-      <View style={styles.itemText}>{children}</View>
-    </Pressable>
-  );
-}
-
 export default function DetailPage({book, tracking, syncNote, onToggleTracking, onClose, onWriteReview, onSetStatus, onSetEdition}: Props) {
   const [view, setView] = useState<'detail' | 'status' | 'editions'>('detail');
-  const [pending, setPending] = useState<string | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [aboutLong, setAboutLong] = useState(false);
 
@@ -185,44 +162,7 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
   }
 
   if (view === 'editions') {
-    const choice = pending ?? book.editionId;
-    const shown = book.editions.filter(e => !e.audio && e.pages > 0);
-    const hidden = book.editions.length - shown.length;
-    const close = () => {
-      setView('detail');
-      setPending(null);
-    };
-    return (
-      <View style={styles.page}>
-        <TopBar title="Choose edition" onBack={close} />
-        <ScrollView>
-          <Text style={styles.pickNote}>
-            {`Pick the edition this file is. Page counts and progress follow it.${hidden ? ` ${hidden} edition${hidden > 1 ? 's' : ''} without a page count hidden.` : ''}`}
-          </Text>
-          {shown.map(e => (
-            <Item key={e.id} on={e.id === choice} onPress={() => setPending(e.id)}>
-              <Text style={styles.l1}>{edLine1(e)}</Text>
-              <Text style={styles.l2}>{edLine2(e)}</Text>
-              {e.isbn ? <Text style={styles.l2}>{`ISBN ${e.isbn}`}</Text> : null}
-            </Item>
-          ))}
-        </ScrollView>
-        <View style={styles.actions}>
-          <Pressable accessibilityRole="button" style={styles.action} onPress={close}>
-            <Text style={styles.actionText}>Cancel</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            style={styles.action}
-            onPress={() => {
-              onSetEdition(choice);
-              close();
-            }}>
-            <Text style={styles.actionText}>Use this edition</Text>
-          </Pressable>
-        </View>
-      </View>
-    );
+    return <EditionPicker editions={book.editions} editionId={book.editionId} onPick={onSetEdition} onClose={() => setView('detail')} />;
   }
 
   const page = book.status === 'Finished' ? ed.pages : Math.min(ed.pages, Math.max(1, Math.round(book.progress * ed.pages)));
@@ -368,10 +308,4 @@ const styles = StyleSheet.create({
   actions: {flexDirection: 'row', paddingVertical: 16, paddingLeft: 16, paddingRight: 2, borderTopWidth: 2, borderColor: BLACK},
   action: {flex: 1, height: 68, borderWidth: 3, borderColor: BLACK, alignItems: 'center', justifyContent: 'center', marginRight: 14},
   actionText: {fontSize: 24, fontWeight: '700', color: BLACK},
-  pickNote: {fontSize: 19, lineHeight: 25, paddingVertical: 14, paddingHorizontal: 24, borderBottomWidth: 2, borderColor: BLACK, color: BLACK},
-  item: {flexDirection: 'row', alignItems: 'center', minHeight: 88, paddingVertical: 10, paddingHorizontal: 24, borderBottomWidth: 2, borderColor: BLACK, backgroundColor: WHITE},
-  itemOn: {borderLeftWidth: 8, paddingLeft: 16},
-  itemText: {flex: 1},
-  radio: {width: 30, height: 30, marginRight: 18, borderWidth: 3, borderColor: BLACK, borderRadius: 15, alignItems: 'center', justifyContent: 'center'},
-  radioDot: {width: 14, height: 14, borderRadius: 7, backgroundColor: BLACK},
 });
