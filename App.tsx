@@ -78,13 +78,25 @@ export default function App(): React.JSX.Element {
   };
 
   if (preview) {
-    // preview only: mock data, the review button flips between the normal and the worst-case mock
+    // preview only: mock data. The review button flips between the normal and the worst-case mock; Close on the detail
+    // page opens the journal card (its Close and saves come back here; every second save fails, to see Retry).
+    if (journal) {
+      return (
+        <JournalPage
+          book={book ?? MOCK_BOOK}
+          passage={journal.passage}
+          onSetEdition={editionId => setBook({...(book ?? MOCK_BOOK), editionId, editionSaved: true})}
+          onSave={() => new Promise((ok, fail) => (Date.now() % 2 ? ok() : fail(new Error('Network request failed'))))}
+          onClose={() => setJournal(null)}
+        />
+      );
+    }
     return (
       <DetailPage
         book={long ? MOCK_LONG : (book ?? MOCK_BOOK)}
         tracking={tracking}
         onToggleTracking={() => setTracking(!tracking)}
-        onClose={close}
+        onClose={() => setJournal({passage: 'Call me Ishmael. Some years ago, never mind how long precisely, having little or no money in my purse, I thought I would sail about a little and see the watery part of the world.'})}
         onWriteReview={() => setLong(l => !l)}
         onSetStatus={status => setBook({...(book ?? MOCK_BOOK), status})}
         onSetEdition={editionId => setBook({...(book ?? MOCK_BOOK), editionId, editionSaved: true})}

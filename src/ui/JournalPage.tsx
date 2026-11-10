@@ -123,7 +123,7 @@ export default function JournalPage({book, passage, onSetEdition, onSave, onClos
               {tab === 'quote' ? (
                 <>
                   <Text style={styles.quote} numberOfLines={6}>
-                    {passage}
+                    {passage || 'No text selected. Select a passage in the book first, or write a note.'}
                   </Text>
                   <TextInput
                     style={[styles.input, {height: 3 * 28 + 24}]}

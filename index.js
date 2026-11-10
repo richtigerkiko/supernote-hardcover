@@ -132,7 +132,7 @@ async function readMeta(path) {
   return parseEpub(read, blob.size);
 }
 
-// ---- Hardcover: the Currently Reading list (cached) and which item a file is ----
+// ---- Hardcover: the books in the library (cached) and which item a file is ----
 let reading = {at: 0, list: []};
 let readingGen = 0; // bumped when the list is known stale; a fetch that started before that is not cached
 function dropReadingList() {
@@ -320,7 +320,8 @@ PluginManager.registerButton(1, ['DOC'], {id: 100, name: 'Hardcover', icon, show
 PluginManager.registerButton(3, ['DOC'], {id: 300, name: 'hardcover-select', icon, showType: 1});
 
 const readSelection = () =>
-  withTimeout(PluginDocAPI.getLastSelectedText(), 8_000, 'selection').then(r => cleanQuote(r?.success ? r.result : ''));
+  withTimeout(PluginDocAPI.getLastSelectedText(), 8_000, 'selection').then(r => cleanQuote(r?.success ? r.result : ''))
+    .catch(() => ''); // no selection or a hung call: the page explains it and offers a note
 
 PluginManager.registerButtonListener({
   onButtonPress(event) {
