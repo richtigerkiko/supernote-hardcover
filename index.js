@@ -317,7 +317,7 @@ async function onQuote() {
 
 const icon = Image.resolveAssetSource(require('./assets/icon.png')).uri;
 PluginManager.registerButton(1, ['DOC'], {id: 100, name: 'Hardcover', icon, showType: 1});
-PluginManager.registerButton(3, ['DOC'], {id: 300, name: 'Save quote', icon, showType: 0});
+if (QUOTES_ENABLED) PluginManager.registerButton(3, ['DOC'], {id: 300, name: 'Save quote', icon, showType: 0});
 
 PluginManager.registerButtonListener({
   onButtonPress(event) {
