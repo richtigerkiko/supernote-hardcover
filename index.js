@@ -287,6 +287,7 @@ session.api = {
     const editionIds = [...new Set([entry?.editionId, meta.edition?.id].filter(Boolean))];
     const book = await withTimeout(fetchBookDetail(TOKEN, item.bookId, editionIds), 20_000, 'book details');
     const detail = buildDetail({book, item, saved: meta.edition, sample: s, isbns: isbnsIn((meta.ids ?? []).join(' '))});
+    if (!detail.editions.some(e => e.pages > 0)) return {message: 'Hardcover has no edition with a page count for this book.'};
     if (mine === loadSeq) current = {path: s.path, item, detail};
     return {book: detail, tracking: meta.tracking === true, sync: syncNote(s.path)};
   },
