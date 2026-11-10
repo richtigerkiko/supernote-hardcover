@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "scripts": {
-    "build": "node scripts/write-token.js && powershell -NoProfile -ExecutionPolicy Bypass -File buildPlugin.ps1",
+    "build": "node scripts/write-token.js && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/buildPlugin.ps1",
     "android": "react-native run-android",
     "lint": "eslint .",
     "start": "react-native start",

@@ -33,7 +33,7 @@ Supernote plugin that sends the reading position of the EPUB open in DOC to Hard
 
 ```powershell
 Remove-Item Env:NoDefaultCurrentDirectoryInExePath   # this machine sets it to 1, so cmd cannot run gradlew.bat from the current folder; clearing it affects only this PowerShell process
-npm run build          # writes src/token.generated.js from ../../.env (HARDCOVER_KEY), then buildPlugin.ps1 (Gradle: JDK 17, platform 35, build-tools 35.0.0, NDK 27.1.12297006, Gradle 8.13 via the wrapper)
+npm run build          # writes src/token.generated.js from ../../.env (HARDCOVER_KEY), then scripts/buildPlugin.ps1 (Gradle: JDK 17, platform 35, build-tools 35.0.0, NDK 27.1.12297006, Gradle 8.13 via the wrapper)
 ```
 
 Push from Git Bash with `MSYS_NO_PATHCONV=1` (it rewrites `/storage/...` paths), or from PowerShell: `adb -s SN078E10048537 push build\outputs\HardcoverSync.snplg /storage/emulated/0/MyStyle/HardcoverSync.snplg`. The first native build took 46 s here (Gradle was cached); the package is about 7 MB (a 6.9 MB `app.npk` plus the 1.1 MB bundle).
@@ -47,7 +47,3 @@ Install with Settings > Apps > Plugins > Add Plugin (not "reinstall"). Bump `ver
 To design it at the Nomad's real size, follow the "Emulator" section of the workspace CLAUDE.md. For this project: Metro with `$env:SN_FAKE_SDK = '1'; npx --no-install react-native start --reset-cache` (a Metro for this project may already be running on 8081: check `curl localhost:8081/status`, and do not start a second one), install `android\app\build\outputs\apk\debug\app-debug.apk` on the emulator only (`adb -s emulator-5554 install -r ...`, all ABIs were built), `adb -s emulator-5554 reverse tcp:8081 tcp:8081`, then `adb -s emulator-5554 shell am start -n com.hardcoversync/.MainActivity`. JS edits reload through Metro (or force-stop and start the app). In preview, the Add note button flips between the normal and the worst-case mock, and the toggle flips ON/OFF; adb taps work on the emulator (not on the Nomad). Rebuild the APK only when native code changes.
 
 Design findings (emulator, 1404x1872): everything fits on one screen with the action bar fixed at the bottom, so scrolling (slow on e-ink) is only needed for the extreme case; a `showType: 1` view is full-screen on the Nomad (regionType is ignored), and the emulator shows a status bar the Nomad view will not have.
-
-## Not done
-
-Quote saving (needs the verification above), a settings screen (only the file exists), PDFs (EPUB only), OAuth (the root `.env` has a client id, unused), a Hardcover edition switch when the file's edition differs from the reading entry.

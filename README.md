@@ -1,7 +1,35 @@
-# HardcoverSync
+# HardcoverSync (Supernote plugin)
 
-Supernote plugin that sends the reading position of the EPUB open in DOC to Hardcover (hardcover.app).
+Keeps your [Hardcover](https://hardcover.app) reading progress up to date while you read EPUBs in DOC on a Supernote. Switch it on for a book, then just read.
 
-This is a personal build that carries the owner's API token, so a built `.snplg` must never be shared.
+It runs fully on the device. The only network traffic is to the Hardcover API.
 
-Everything else (how it works, build, install, device notes) is in [CLAUDE.md](CLAUDE.md).
+## What it does
+
+- **Tracks the book you have open.** Progress is sent each time you cross a 2% step of the book, forwards or backwards. A few pages inside one step never push, so flipping back to re-read is harmless.
+- **Finds the book by itself.** Title, author and ISBN come from the EPUB's metadata, not the filename, and are matched against your Hardcover library.
+- **Uses your edition.** Pick the edition you own and page counts are computed against it. Font size and orientation changes don't matter.
+- **Off by default, per book.** A Tracking toggle on each book's page decides what gets sent.
+- **Book page.** The **Hardcover** toolbar button opens a full-screen page with progress, cover, genres, moods and tags, the description, your reading status and the edition picker. It also shows the last sync, or the error if there was one.
+
+## Install
+
+Copy `HardcoverSync.snplg` to the device's `MyStyle` folder, then Settings > Apps > Plugins > Add Plugin and select it. Open an EPUB, tap **Hardcover**, and turn Tracking on.
+
+## Build from source
+
+Needs Node, JDK 17 and the Android SDK (platform 35, build-tools 35.0.0, NDK 27.1.12297006), and your Hardcover API token as `HARDCOVER_KEY` in `../../.env`.
+
+```powershell
+npm install
+npm run build   # writes build\outputs\HardcoverSync.snplg
+npm test
+```
+
+The token is bundled into the package, so don't share a built `.snplg`.
+
+## Notes
+
+- EPUB only. PDFs are not supported yet.
+- Tracking follows your touches, not a timer, so a page turned at the last tap is reported at your next touch.
+- How it works, measurements from the device and build details are in [CLAUDE.md](CLAUDE.md).
