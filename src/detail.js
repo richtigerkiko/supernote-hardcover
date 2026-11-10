@@ -1,6 +1,13 @@
-// Hardcover user_books.status_id by the labels of the detail page. 1, 2, 3 and 5 are confirmed against the account
-// (via user_book_status); 4 (Paused) is used by no book here, so it is only known from third-party docs.
-export const STATUS_ID = {'Want to read': 1, 'Currently reading': 2, Paused: 4, 'Did not finish': 5, Finished: 3};
+import {UserBookStatus} from '@hardcover/sdk';
+
+// Hardcover user_books.status_id by the labels of the detail page.
+export const STATUS_ID = {
+  'Want to read': UserBookStatus.WantToRead,
+  'Currently reading': UserBookStatus.CurrentlyReading,
+  Paused: UserBookStatus.Paused,
+  'Did not finish': UserBookStatus.DidNotFinish,
+  Finished: UserBookStatus.Read,
+};
 
 // The edition the reader said this file is replaces the one on the reading entry, for the pages we compute and for the
 // edition id sent with each progress update.
@@ -17,13 +24,13 @@ const tagNames = (tags, group) => (tags?.[group] ?? []).map(t => t.tag);
 export function buildDetail({book, item, saved, sample, isbns = []}) {
   const editions = book.editions.map(e => ({
     id: String(e.id),
-    format: e.edition_format ?? 'Edition',
+    format: e.editionFormat ?? 'Edition',
     publisher: e.publisher?.name ?? 'Unknown publisher',
-    year: e.release_date ? Number(e.release_date.slice(0, 4)) : null,
+    year: e.releaseDate ? Number(e.releaseDate.slice(0, 4)) : null,
     pages: e.pages ?? 0,
     lang: e.language?.language ?? '',
-    isbn: e.isbn_13 ?? undefined,
-    audio: !!e.audio_seconds && !e.pages,
+    isbn: e.isbn13 ?? undefined,
+    audio: !!e.audioSeconds && !e.pages,
   }));
   const wanted = String(saved?.id ?? '');
   const byFile = editions.find(e => e.isbn && e.pages > 0 && isbns.includes(e.isbn));
@@ -37,16 +44,15 @@ export function buildDetail({book, item, saved, sample, isbns = []}) {
   return {
     title: book.title,
     subtitle: book.subtitle,
-    authors: (book.contributions ?? []).map(c => c.author.name),
-    cover: book.image?.url ?? null,
+    authors: (book.contributions ?? []).flatMap(c => (c.author ? [c.author.name] : [])),
+    cover: book.cachedImage?.url ?? null,
     rating: book.rating || null,
-    ratingsCount: book.ratings_count,
-    reviewsCount: book.reviews_count,
+    ratingsCount: book.ratingsCount,
     status: Object.keys(STATUS_ID).find(k => STATUS_ID[k] === item.statusId) ?? 'Currently reading',
     progress: Math.min(1, (sample.page + 1) / sample.total),
-    genres: tagNames(book.cached_tags, 'Genre'),
-    moods: tagNames(book.cached_tags, 'Mood'),
-    tags: tagNames(book.cached_tags, 'Tag'),
+    genres: tagNames(book.cachedTags, 'Genre'),
+    moods: tagNames(book.cachedTags, 'Mood'),
+    tags: tagNames(book.cachedTags, 'Tag'),
     description: book.description,
     editions,
     editionId: ed ? ed.id : '',

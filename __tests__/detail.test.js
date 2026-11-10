@@ -1,13 +1,13 @@
 import {buildDetail, STATUS_ID, withEdition} from '../src/detail';
 
 const book = {
-  title: 'T', subtitle: null, rating: 0, ratings_count: 0, reviews_count: 0, description: 'd', image: null,
+  title: 'T', subtitle: null, rating: 0, ratingsCount: 0, description: 'd', cachedImage: {},
   contributions: [{author: {name: 'A'}}],
-  cached_tags: {Genre: [{tag: 'Horror'}], Mood: [{tag: 'dark'}], Tag: [{tag: 'x'}, {tag: 'y'}], 'Content Warning': [{tag: 'cw'}]},
+  cachedTags: {Genre: [{tag: 'Horror'}], Mood: [{tag: 'dark'}], Tag: [{tag: 'x'}, {tag: 'y'}], 'Content Warning': [{tag: 'cw'}]},
   editions: [
-    {id: 1, edition_format: 'Paperback', pages: 330, audio_seconds: null, release_date: '2026-02-26', isbn_13: '9781952600562', publisher: {name: 'P'}, language: {language: 'English'}},
-    {id: 2, edition_format: 'Kindle Edition', pages: 288, audio_seconds: null, release_date: null, isbn_13: '9781668287323', publisher: null, language: null},
-    {id: 3, edition_format: 'Audible', pages: null, audio_seconds: 23940, release_date: '2026-10-20', publisher: null, language: null},
+    {id: 1, editionFormat: 'Paperback', pages: 330, audioSeconds: null, releaseDate: '2026-02-26', isbn13: '9781952600562', publisher: {name: 'P'}, language: {language: 'English'}},
+    {id: 2, editionFormat: 'Kindle Edition', pages: 288, audioSeconds: null, releaseDate: null, isbn13: '9781668287323', publisher: null, language: null},
+    {id: 3, editionFormat: 'Audible', pages: null, audioSeconds: 23940, releaseDate: '2026-10-20', publisher: null, language: null},
   ],
 };
 const item = {userBookId: 9, bookId: 5, editionId: 1, editionPages: 330, read: {id: 7, edition_id: 1}};
