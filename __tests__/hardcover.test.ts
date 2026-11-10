@@ -1,9 +1,17 @@
+import type {ReadingItem} from '../src/hardcover';
 import {bookIdsForIsbns, fetchBookDetail, fetchUserBooks, localDate, progressInput, saveProgress, saveJournal, setStatus} from '../src/hardcover';
 
 // The SDK is the transport; these tests check what we send it and how we map what it returns.
-const mockSdk = {library: {}, books: {}, journal: {}, request: jest.fn(), options: undefined};
+type Mocks = Record<string, jest.Mock>;
+const mockSdk: {library: Mocks; books: Mocks; journal: Mocks; request: jest.Mock; options: unknown} = {
+  library: {},
+  books: {},
+  journal: {},
+  request: jest.fn(),
+  options: undefined,
+};
 jest.mock('@hardcover/sdk', () => ({
-  HardcoverClient: function (options) {
+  HardcoverClient: function (options: unknown) {
     mockSdk.options = options;
     return mockSdk;
   },
@@ -12,15 +20,18 @@ jest.mock('@hardcover/sdk', () => ({
   operations: {UpdateUserBookRead: 'UPDATE', AddUserBookRead: 'ADD'},
 }));
 
-const ITEM = {
+const ITEM: ReadingItem = {
   userBookId: 7,
   bookId: 2312000,
+  statusId: 2,
+  title: 'The Butcher of Nazareth',
+  authors: ['David Scott Hay'],
   editionId: 32560293,
   editionPages: 330,
   read: {id: 99, started_at: '2026-11-01', finished_at: null, progress_pages: 100, edition_id: 32560293},
 };
 
-const libraryRow = (over = {}) => ({
+const libraryRow = (over: Record<string, unknown> = {}) => ({
   id: 7,
   bookId: 2312000,
   statusId: 2,
@@ -67,7 +78,7 @@ test('fetchUserBooks reads every page, and a book with no read has read: null', 
   const books = await fetchUserBooks('T');
   expect(books.map(b => b.userBookId)).toEqual([1, 2]);
   expect(books[1]).toMatchObject({read: null, editionId: null, editionPages: null});
-  expect(mockSdk.library.list.mock.calls.map(c => c[0].offset)).toEqual([0, 100]);
+  expect(mockSdk.library.list.mock.calls.map((c: {offset: number}[]) => c[0].offset)).toEqual([0, 100]);
 });
 
 test('bookIdsForIsbns returns each book once, even when several editions match', async () => {
@@ -78,7 +89,7 @@ test('bookIdsForIsbns returns each book once, even when several editions match',
 
 test('progressInput keeps the existing started_at and edition, and leaves null fields out', () => {
   expect(progressInput(ITEM, 120)).toEqual({progress_pages: 120, edition_id: 32560293, started_at: '2026-11-01'});
-  const noDates = {...ITEM, read: {...ITEM.read, started_at: null}};
+  const noDates: ReadingItem = {...ITEM, read: {...ITEM.read!, started_at: null}};
   expect(progressInput(noDates, 120)).toEqual({progress_pages: 120, edition_id: 32560293});
 });
 
@@ -123,7 +134,7 @@ test('localDate is the local calendar day, in any time zone', () => {
 
 test('never writes without a real page count', async () => {
   await expect(saveProgress('T', ITEM, 0)).rejects.toThrow(/no page count/);
-  await expect(saveProgress('T', ITEM, null)).rejects.toThrow(/no page count/);
+  await expect(saveProgress('T', ITEM, null as unknown as number)).rejects.toThrow(/no page count/);
   expect(mockSdk.request).not.toHaveBeenCalled();
 });
 
@@ -135,7 +146,7 @@ test('an SDK failure reaches the caller with its status (the 401 stop and the 42
 test('fetchBookDetail adds an edition that only the reader uses, once', async () => {
   mockSdk.books.get.mockResolvedValue({title: 'T'});
   mockSdk.books.editions.mockResolvedValue({items: [{id: 1}, {id: 2}]});
-  mockSdk.books.edition.mockImplementation(async id => ({id}));
+  mockSdk.books.edition.mockImplementation(async (id: number) => ({id}));
   const book = await fetchBookDetail('T', 5, [2, 300]);
   expect(book.editions.map(e => e.id)).toEqual([1, 2, 300]);
   expect(mockSdk.books.edition).toHaveBeenCalledTimes(1);
@@ -158,7 +169,7 @@ test('setStatus sends only the status', async () => {
 
 describe('saveJournal', () => {
   const POSITION = {type: 'pages', value: 83, percent: 28.81944444444444, possible: 288};
-  const ENTRY = {bookId: 2312000, editionId: 32560293, event: 'quote', entry: 'a line', position: POSITION};
+  const ENTRY = {bookId: 2312000, editionId: 32560293, event: 'quote' as const, entry: 'a line', position: POSITION};
 
   test('sends a private entry for the book and edition, with the position', async () => {
     mockSdk.journal.add.mockResolvedValue({id: 5});
@@ -180,7 +191,7 @@ describe('saveJournal', () => {
 
   test('empty entries and unknown events are refused before any request', async () => {
     await expect(saveJournal('T', {...ENTRY, entry: '   '})).rejects.toThrow(/empty/);
-    await expect(saveJournal('T', {...ENTRY, event: 'review'})).rejects.toThrow(/event/);
+    await expect(saveJournal('T', {...ENTRY, event: 'review' as 'quote'})).rejects.toThrow(/event/);
     expect(mockSdk.journal.add).not.toHaveBeenCalled();
   });
 });

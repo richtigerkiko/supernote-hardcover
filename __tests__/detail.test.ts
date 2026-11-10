@@ -1,5 +1,7 @@
 import {buildDetail, STATUS_ID, withEdition} from '../src/detail';
+import type {BookDetail, ReadingItem} from '../src/hardcover';
 
+// A partial fixture of the SDK's large Book type: only the fields buildDetail reads.
 const book = {
   title: 'T', subtitle: null, rating: 0, ratingsCount: 0, description: 'd', cachedImage: {},
   contributions: [{author: {name: 'A'}}],
@@ -9,11 +11,21 @@ const book = {
     {id: 2, editionFormat: 'Kindle Edition', pages: 288, audioSeconds: null, releaseDate: null, isbn13: '9781668287323', publisher: null, language: null},
     {id: 3, editionFormat: 'Audible', pages: null, audioSeconds: 23940, releaseDate: '2026-10-20', publisher: null, language: null},
   ],
+} as unknown as BookDetail;
+const item: ReadingItem = {
+  userBookId: 9,
+  bookId: 5,
+  statusId: 2,
+  title: 'T',
+  authors: ['A'],
+  editionId: 1,
+  editionPages: 330,
+  read: {id: 7, started_at: null, finished_at: null, progress_pages: null, edition_id: 1},
 };
-const item = {userBookId: 9, bookId: 5, editionId: 1, editionPages: 330, read: {id: 7, edition_id: 1}};
+const at = (page: number, total: number) => ({path: '/b.epub', page, total});
 
 test('builds the page props: tags by group, string ids, audio flagged, no content warnings', () => {
-  const d = buildDetail({book, item, saved: null, sample: {page: 105, total: 400}});
+  const d = buildDetail({book, item, saved: null, sample: at(105, 400)});
   expect(d.genres).toEqual(['Horror']);
   expect(d.moods).toEqual(['dark']);
   expect(d.tags).toEqual(['x', 'y']);
@@ -27,7 +39,7 @@ test('builds the page props: tags by group, string ids, audio flagged, no conten
 });
 
 test("the file's own ISBN picks the edition before the reading entry does, a saved pick still wins", () => {
-  const base = {book, item, sample: {page: 0, total: 10}};
+  const base = {book, item, sample: at(0, 10)};
   const byIsbn = buildDetail({...base, saved: null, isbns: ['9781668287323']});
   expect(byIsbn).toMatchObject({editionId: '2', editionIsbn: true, editionSaved: false});
   expect(buildDetail({...base, saved: {id: 1, pages: 330}, isbns: ['9781668287323']})).toMatchObject({editionId: '1', editionIsbn: false, editionSaved: true});
@@ -35,14 +47,14 @@ test("the file's own ISBN picks the edition before the reading entry does, a sav
 });
 
 test('a saved edition wins over the reading entry and changes the pages', () => {
-  const d = buildDetail({book, item, saved: {id: 2, pages: 288}, sample: {page: 105, total: 400}});
+  const d = buildDetail({book, item, saved: {id: 2, pages: 288}, sample: at(105, 400)});
   expect(d.editionId).toBe('2');
   expect(d.editionSaved).toBe(true);
   expect(d.progress).toBeCloseTo(106 / 400);
 });
 
 test('a saved edition that Hardcover no longer lists falls back to the reading entry, unsaved', () => {
-  const d = buildDetail({book, item, saved: {id: 99, pages: 10}, sample: {page: 0, total: 10}});
+  const d = buildDetail({book, item, saved: {id: 99, pages: 10}, sample: at(0, 10)});
   expect(d.editionId).toBe('1');
   expect(d.editionSaved).toBe(false);
 });
@@ -61,7 +73,7 @@ test('status ids', () => {
 });
 
 test('an edition without a page count is never the default: it falls through to one that has pages', () => {
-  const nopages = {...book, editions: [{...book.editions[0], id: 1, pages: null}, book.editions[1]]};
-  const d = buildDetail({book: nopages, item, saved: null, sample: {page: 0, total: 10}, isbns: ['9781952600562']});
+  const nopages = {...book, editions: [{...book.editions[0], id: 1, pages: null}, book.editions[1]]} as BookDetail;
+  const d = buildDetail({book: nopages, item, saved: null, sample: at(0, 10), isbns: ['9781952600562']});
   expect(d.editionId).toBe('2'); // neither the reading entry's edition (1) nor the file's ISBN edition (1) has pages
 });

@@ -1,4 +1,4 @@
-import {zipSync, strToU8} from 'fflate';
+import {zipSync, strToU8, type Zippable, type ZipOptions} from 'fflate';
 import {parseEpub} from '../src/epub';
 
 const OPF = `<package><metadata xmlns:dc="x">
@@ -8,7 +8,7 @@ const OPF = `<package><metadata xmlns:dc="x">
   <dc:identifier id="eisbn">9781668287323</dc:identifier>
   <meta property="pageBreakSource">9781668287309</meta></metadata></package>`;
 
-const build = (opfPath, opf, opts = {}) =>
+const build = (opfPath: string, opf: string, opts: {extra?: Zippable; zip?: ZipOptions} = {}) =>
   zipSync(
     {
       mimetype: [strToU8('application/epub+zip'), {level: 0}],
@@ -20,9 +20,9 @@ const build = (opfPath, opf, opts = {}) =>
   );
 
 // A reader over in-memory bytes that records how much was read.
-const reader = bytes => {
+const reader = (bytes: Uint8Array) => {
   const stats = {bytes: 0};
-  const read = async (o, l) => ((stats.bytes += l), bytes.subarray(o, o + l));
+  const read = async (o: number, l: number) => ((stats.bytes += l), bytes.subarray(o, o + l));
   return {read, size: bytes.length, stats};
 };
 

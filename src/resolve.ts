@@ -1,3 +1,5 @@
+import type {EpubMeta} from './epub';
+import type {ReadingItem} from './hardcover';
 import {isbnsIn, matchBook} from './match';
 
 // Which book on the reader's shelves is this EPUB? Decided only by its own metadata, never its filename.
@@ -6,7 +8,15 @@ import {isbnsIn, matchBook} from './match';
 // An ISBN that Hardcover knows decides it (that book is the one). Otherwise
 // title + author are matched. Both are needed: real files have ISBN typos (an invalid checksum) and
 // editions Hardcover lacks. Returns the reading item, or null.
-export async function resolveBook({meta, reading, bookIdsForIsbns}) {
+export async function resolveBook({
+  meta,
+  reading,
+  bookIdsForIsbns,
+}: {
+  meta: EpubMeta;
+  reading: ReadingItem[];
+  bookIdsForIsbns: (isbns: string[]) => Promise<number[]>;
+}): Promise<ReadingItem | null> {
   const isbns = isbnsIn([...meta.ids, meta.pageBreakSource ?? ''].join(' '));
   if (isbns.length) {
     const ids = await bookIdsForIsbns(isbns);

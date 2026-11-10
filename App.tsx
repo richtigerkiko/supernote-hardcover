@@ -1,6 +1,6 @@
 /**
- * Root component, shown when the Hardcover button opens the plugin view (full screen on the Nomad). index.js hands over
- * the data and actions through src/session.js. Under the emulator's fake SDK (Metro with SN_FAKE_SDK=1, see the
+ * Root component, shown when the Hardcover button opens the plugin view (full screen on the Nomad). src/plugin.ts hands over
+ * the data and actions through src/session.ts. Under the emulator's fake SDK (Metro with SN_FAKE_SDK=1, see the
  * workspace CLAUDE.md) it shows mock data instead, to design the page at the Nomad's real size.
  *
  * @format
@@ -114,7 +114,7 @@ export default function App(): React.JSX.Element {
           setBook({...book, editionId, editionSaved: true});
           session.api?.setEdition(editionId);
         }}
-        onSave={e => session.api.saveJournal(e)}
+        onSave={e => session.api!.saveJournal(e)}
         onClose={close}
       />
     );

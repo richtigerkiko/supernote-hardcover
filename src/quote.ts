@@ -1,7 +1,7 @@
 // The reader returns a selection with a hard \n at every line wrap of the page. Join wrapped lines into
 // sentences and keep blank-line gaps as paragraph breaks.
 // shortcut: a word hyphenated across a line break keeps its hyphen and a space ("recog- nise"); upgrade if it shows up.
-export function cleanQuote(raw) {
+export function cleanQuote(raw?: string | null): string {
   return String(raw ?? '')
     .replace(/\r/g, '')
     .split(/\n{2,}/)

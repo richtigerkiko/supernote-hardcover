@@ -1,27 +1,48 @@
+import type {EpubMeta} from './epub';
+
 const MAX_CACHE_ENTRIES = 300;
+
+/** The native module (android/.../HardcoverNativeModule). */
+export interface NativeFs {
+  readTextFile(path: string): Promise<string>;
+  writeFile(path: string, text: string): Promise<unknown>;
+  stat(path: string): Promise<{exists: boolean; size: number}>;
+}
+
+export interface JsonFile<T> {
+  load(): Promise<T>;
+  save(): Promise<void>;
+}
+
+/** What is remembered about one file besides what its EPUB says. */
+export interface FileMeta extends EpubMeta {
+  failed?: boolean; // memory only: the EPUB could not be read
+  edition?: {id: number; pages: number}; // the edition the reader picked for this file
+  tracking?: boolean; // tracking is switched on for this file
+}
 
 // A JSON file behind the native adapter {readTextFile, writeFile, stat}, with an in-memory copy. It never throws:
 // no adapter (the native part is missing), a missing file, corrupt JSON or a failed write all leave the in-memory
 // copy working, because the plugin must keep tracking without persistence. There are no timers (they do not run in
 // some lifecycle states): a change is written at once, one write at a time, a write requested during another is
 // coalesced into one more write of the latest data.
-export function createJsonFile(native, path, defaults = {}) {
-  let data = null;
-  let loading = null;
-  let writing = null;
+export function createJsonFile<T extends object>(native: NativeFs | null, path: string, defaults: Partial<T> = {}): JsonFile<T> {
+  let data: T | null = null;
+  let loading: Promise<T> | null = null;
+  let writing: Promise<void> | null = null;
   let dirty = false;
 
   // Keep the promise, not the data: a second load() during the first read must wait for it, or it gets the empty
   // defaults and its change is lost when the read finishes.
   const load = () => (loading = loading || readOnce());
 
-  async function readOnce() {
-    data = {...defaults};
+  async function readOnce(): Promise<T> {
+    data = {...defaults} as T;
     if (native) {
       try {
         const text = await native.readTextFile(path);
         const parsed = text ? JSON.parse(text) : null;
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) data = {...defaults, ...parsed};
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) data = {...defaults, ...parsed} as T;
       } catch {
         /* corrupt or unreadable: start from the defaults; the next save replaces the file */
       }
@@ -29,11 +50,11 @@ export function createJsonFile(native, path, defaults = {}) {
     return data;
   }
 
-  async function flush() {
+  async function flush(): Promise<void> {
     try {
       while (dirty) {
         dirty = false;
-        await native.writeFile(path, JSON.stringify(data));
+        await native!.writeFile(path, JSON.stringify(data));
       }
     } catch {
       /* keep the in-memory copy; the next change tries again */
@@ -42,7 +63,7 @@ export function createJsonFile(native, path, defaults = {}) {
     }
   }
 
-  async function save() {
+  async function save(): Promise<void> {
     if (!native || !data) return;
     dirty = true;
     if (!writing) writing = flush();
@@ -54,8 +75,10 @@ export function createJsonFile(native, path, defaults = {}) {
 
 // EPUB metadata by path. An entry is valid only while the file has the same size, so replacing a book under the same
 // name re-reads it. The modification time is not used: the document app updates it every time a book is opened.
-export function createMetaCache(file, stat) {
-  const sizeOf = async path => {
+type MetaStore = Record<string, {size: number; meta: FileMeta}>;
+
+export function createMetaCache(file: JsonFile<MetaStore>, stat: NativeFs['stat']) {
+  const sizeOf = async (path: string): Promise<number | null> => {
     try {
       const s = await stat(path);
       return s && s.exists ? s.size : null;
@@ -64,12 +87,12 @@ export function createMetaCache(file, stat) {
     }
   };
   return {
-    async get(path) {
+    async get(path: string): Promise<FileMeta | null> {
       const entry = (await file.load())[path];
       if (!entry || typeof entry.size !== 'number') return null;
       return (await sizeOf(path)) === entry.size ? entry.meta : null;
     },
-    async set(path, meta) {
+    async set(path: string, meta: FileMeta): Promise<void> {
       const data = await file.load();
       const size = await sizeOf(path);
       if (size === null) return; // cannot validate it later, so do not keep it
@@ -86,12 +109,12 @@ export function createMetaCache(file, stat) {
 
 // Small user settings that must survive a reinstall (kept in MyStyle, which needs the FILE:WRITE grant before the
 // first access: ask for it before calling load()).
-export function createSettings(file, defaults) {
+export function createSettings<T extends Record<string, unknown>>(file: JsonFile<Partial<T>>, defaults: T) {
   return {
-    async get(key) {
-      return (await file.load())[key] ?? defaults[key];
+    async get<K extends keyof T>(key: K): Promise<T[K]> {
+      return ((await file.load())[key] ?? defaults[key]) as T[K];
     },
-    async set(key, value) {
+    async set<K extends keyof T>(key: K, value: T[K]): Promise<void> {
       (await file.load())[key] = value;
       await file.save();
     },
