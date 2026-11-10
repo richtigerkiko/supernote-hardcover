@@ -17,7 +17,7 @@ const BUSY_EXPIRY_MS = 60_000;
 // resolve(path) -> reading item | null; push(item, pages) -> Promise; both are injected.
 // tick(sample) takes {path, page (0-based), total} or null when the reader gave nothing usable (a note, the screen
 // asleep). It is called at touches (no timers run in some lifecycle states); a null sample still retries a failed push.
-export const stepOf = (page, total) => Math.floor((Math.min(page + 1, total) / total) * (100 / STEP_PERCENT));
+export const stepOf = (page, total) => Math.floor((Math.min(page + 1, total) * (100 / STEP_PERCENT)) / total);
 
 export function createTracker({resolve, push, now = Date.now}) {
   const books = new Map(); // path -> {item, step (last pushed or first seen), pending: {pages, step}|null, retryAt, checkedAt}
@@ -65,7 +65,7 @@ export function createTracker({resolve, push, now = Date.now}) {
         state.lastPush = {path, title: item.title, pages: p.pages, at: now()};
         state.lastError = null;
       } catch (e) {
-        b.retryAt = now() + (/429/.test(e.message) ? RATE_LIMIT_RETRY_MS : RETRY_MS);
+        b.retryAt = now() + (e.status === 429 ? RATE_LIMIT_RETRY_MS : RETRY_MS);
         state.lastError = e;
         e.path = path; // lets the page show the error only for this file
       }

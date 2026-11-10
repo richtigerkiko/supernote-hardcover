@@ -251,7 +251,7 @@ PluginManager.registerMotionListener(1, {
 
 // A rejected token will not fix itself: stop instead of retrying on every touch.
 function stopIfTokenRejected() {
-  if (tokenOk && /401/.test(tracker.state.lastError?.message ?? '')) {
+  if (tokenOk && tracker.state.lastError?.status === 401) {
     tokenOk = false;
     log('token rejected: tracking stopped');
   }
@@ -267,10 +267,12 @@ const syncNote = path => {
   if (e?.path === path) return e.message;
   return p?.path === path ? `Last sync: page ${p.pages}` : '';
 };
+let loadSeq = 0; // a slow load must not overwrite `current` after a newer one
 const dialogOk = tip => dialog(tip, 'OK', 'Close', false).catch(() => {});
 session.api = {
   // -> {book} for DetailPage, or {message} when there is nothing to show
   async load() {
+    const mine = ++loadSeq;
     const s = await (session.pending ?? safeSample());
     session.pending = null;
     if (!s) return {message: 'Open an EPUB in a document to see its Hardcover page.'};
@@ -285,7 +287,8 @@ session.api = {
     const editionIds = [...new Set([entry?.editionId, meta.edition?.id].filter(Boolean))];
     const book = await withTimeout(fetchBookDetail(TOKEN, item.bookId, editionIds), 20_000, 'book details');
     const detail = buildDetail({book, item, saved: meta.edition, sample: s, isbns: isbnsIn((meta.ids ?? []).join(' '))});
-    current = {path: s.path, item, detail};
+    if (!detail.editions.some(e => e.pages > 0)) return {message: 'Hardcover has no edition with a page count for this book.'};
+    if (mine === loadSeq) current = {path: s.path, item, detail};
     return {book: detail, tracking: meta.tracking === true, sync: syncNote(s.path)};
   },
   // Tracking is remembered per file like the edition. Turning it on starts from the page the book is at now (nothing is
@@ -307,14 +310,15 @@ session.api = {
     tracker.forget(current.path);
   },
   async setStatus(label) {
+    const c = current; // a newer load may replace `current` while we wait
     // Paused, Did not finish and Finished take the book off the list the plugin works from, and only hardcover.app undoes that.
     if (label !== 'Currently reading' && !(await dialog('This takes the book off your Currently Reading list. You can only undo it on hardcover.app.', 'Cancel', 'Change', false))) {
       throw new Error('status change cancelled');
     }
     await needPermissions();
-    await setStatus(TOKEN, current.item.userBookId, STATUS_ID[label]);
+    await setStatus(TOKEN, c.item.userBookId, STATUS_ID[label]);
     dropReadingList(); // the list is fetched again, so a book that left Currently Reading stops being tracked
-    tracker.forget(current.path);
+    tracker.forget(c.path);
   },
   writeReview: () => dialogOk('Writing a review from the device is not available yet.'),
 };

@@ -17,9 +17,10 @@ async function gql(token, query, variables) {
     headers: {'content-type': 'application/json', authorization: `Bearer ${token}`},
     body: JSON.stringify({query, variables}),
   });
-  if (res.status === 401) throw new Error('Hardcover token rejected (401): reset or expired');
-  if (res.status === 429) throw new Error('Hardcover rate limit (429)');
-  if (!res.ok) throw new Error(`Hardcover HTTP ${res.status}`);
+  const fail = msg => Object.assign(new Error(msg), {status: res.status}); // callers branch on status, not on the text
+  if (res.status === 401) throw fail('Hardcover token rejected (401): reset or expired');
+  if (res.status === 429) throw fail('Hardcover rate limit (429)');
+  if (!res.ok) throw fail(`Hardcover HTTP ${res.status}`);
   const json = await res.json();
   if (json.errors) throw new Error(`Hardcover: ${json.errors[0].message}`);
   return json.data;
@@ -74,10 +75,13 @@ export function progressInput(item, pages) {
   return input;
 }
 
+// The day as the reader lives it; toISOString gives the UTC day, which is yesterday just after midnight east of UTC.
+export const localDate = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 export async function saveProgress(token, item, pages) {
   if (!(pages > 0)) throw new Error('refusing to save: no page count');
   const input = progressInput(item, pages);
-  const started_at = new Date().toISOString().slice(0, 10);
+  const started_at = localDate(new Date());
   const data = item.read
     ? await gql(token, UPDATE, {id: item.read.id, object: input})
     : await gql(token, INSERT, {ub: item.userBookId, read: {...input, started_at}});
