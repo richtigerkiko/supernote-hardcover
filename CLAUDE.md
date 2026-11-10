@@ -33,7 +33,7 @@ Supernote plugin that sends the reading position of the EPUB open in DOC to Hard
 
 ```powershell
 Remove-Item Env:NoDefaultCurrentDirectoryInExePath   # this machine sets it to 1, so cmd cannot run gradlew.bat from the current folder; clearing it affects only this PowerShell process
-npm run build          # writes src/token.generated.js from ../../.env (HARDCOVER_KEY), then buildPlugin.ps1 (Gradle: JDK 17, platform 35, build-tools 35.0.0, NDK 27.1.12297006, Gradle 8.13 via the wrapper)
+npm run build          # writes src/token.generated.js from ../../.env (HARDCOVER_KEY), then scripts/buildPlugin.ps1 (Gradle: JDK 17, platform 35, build-tools 35.0.0, NDK 27.1.12297006, Gradle 8.13 via the wrapper)
 ```
 
 Push from Git Bash with `MSYS_NO_PATHCONV=1` (it rewrites `/storage/...` paths), or from PowerShell: `adb -s SN078E10048537 push build\outputs\HardcoverSync.snplg /storage/emulated/0/MyStyle/HardcoverSync.snplg`. The first native build took 46 s here (Gradle was cached); the package is about 7 MB (a 6.9 MB `app.npk` plus the 1.1 MB bundle).
@@ -51,3 +51,5 @@ Design findings (emulator, 1404x1872): everything fits on one screen with the ac
 ## Not done
 
 Quote saving (needs the verification above), a settings screen (only the file exists), PDFs (EPUB only), OAuth (the root `.env` has a client id, unused), a Hardcover edition switch when the file's edition differs from the reading entry.
+
+Still to check on the Nomad: Pause/Resume, the 401 path, a 429 retry, the detail page (Write review needs typing, untested in a plugin view; status id 4), picking Paused asks first and Cancel leaves the status alone, a 2% step pushes and shows "Last sync". Open question: how long Hardcover merges progress journal entries (at least 71 minutes; probably per day).
