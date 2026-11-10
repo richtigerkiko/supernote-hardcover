@@ -7,11 +7,15 @@ const MAX_CACHE_ENTRIES = 300;
 // coalesced into one more write of the latest data.
 export function createJsonFile(native, path, defaults = {}) {
   let data = null;
+  let loading = null;
   let writing = null;
   let dirty = false;
 
-  async function load() {
-    if (data) return data;
+  // Keep the promise, not the data: a second load() during the first read must wait for it, or it gets the empty
+  // defaults and its change is lost when the read finishes.
+  const load = () => (loading = loading || readOnce());
+
+  async function readOnce() {
     data = {...defaults};
     if (native) {
       try {
