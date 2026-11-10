@@ -155,7 +155,6 @@ async function readingList() {
   return reading.list;
 }
 async function resolvePath(path) {
-  await needPermissions();
   const meta = await metaFor(path);
   const item = await resolveBook({meta, reading: await readingList(), bookIdsForIsbns: isbns => bookIdsForIsbns(TOKEN, isbns)});
   return withEdition(item, meta.edition); // the edition the reader picked for this file, if any
@@ -246,6 +245,7 @@ session.api = {
     const s = await (session.pending ?? safeSample());
     session.pending = null;
     if (!s) return {message: 'Open an EPUB in a document to see its Hardcover page.'};
+    await needPermissions();
     const item = await withTimeout(resolvePath(s.path), 20_000, 'book lookup');
     if (!item) return {message: 'This book is not on your Hardcover Currently Reading list.'};
     const book = await withTimeout(fetchBookDetail(TOKEN, item.bookId), 20_000, 'book details');
@@ -290,6 +290,7 @@ async function onQuote() {
   if (!text) return say('Select some text first.', false);
   const s = await safeSample();
   if (!s) return say('Open an EPUB to save a quote.', false);
+  await needPermissions();
   const item = await resolvePath(s.path).catch(() => null);
   if (!item) return say('This book is not on your Hardcover Currently Reading list.', false);
   await saveQuote(TOKEN, item, text, s.page + 1, await (await settings()).get('quotePrivacy'));
