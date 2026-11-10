@@ -185,3 +185,56 @@ test('a hung tick does not block later ones forever', async () => {
   await tracker.tick(at(86));
   expect(pushes).toEqual([edition(86)]);
 });
+
+describe('re-check of matched books', () => {
+  const run = (resolveFn, pushFn) => {
+    let t = 1_000_000;
+    const tracker = createTracker({now: () => t, resolve: resolveFn, push: pushFn});
+    return {tracker, advance: ms => (t += ms)};
+  };
+
+  test('after the interval a matched book picks up a new read id', async () => {
+    let item = {...BUTCHER, read: {id: 1}};
+    const used = [];
+    const {tracker, advance} = run(async () => item, async it => used.push(it.read.id));
+    await tracker.tick(at(81));
+    item = {...BUTCHER, read: {id: 2}};
+    advance(601_000);
+    await tracker.tick(at(81)); // re-checked, same step
+    await tracker.tick(at(86));
+    expect(used).toEqual([2]);
+  });
+
+  test('a book that left the list while a push was failing stops pushing without an error', async () => {
+    let item = BUTCHER;
+    let fail = true;
+    const pushes = [];
+    const {tracker, advance} = run(async () => item, async (it, pages) => {
+      if (fail) throw new Error('Hardcover HTTP 500');
+      pushes.push(pages);
+    });
+    await tracker.tick(at(81));
+    await tracker.tick(at(86)); // push fails, stays pending
+    item = null;
+    fail = false;
+    advance(601_000);
+    await tracker.tick(at(86));
+    expect(pushes).toEqual([]);
+    expect(tracker.state.lastError.message).toMatch(/500/); // the old one, no new "push(null)" error
+    advance(61_000);
+    await tracker.tick(null);
+    expect(pushes).toEqual([]);
+  });
+
+  test('a failed re-check keeps pushing with the old item and is not retried on every touch', async () => {
+    let calls = 0;
+    const pushes = [];
+    const {tracker, advance} = run(async () => { if (++calls > 1) throw new Error('offline'); return BUTCHER; }, async (it, pages) => pushes.push(pages));
+    await tracker.tick(at(81));
+    advance(601_000);
+    await tracker.tick(at(81)); // re-check throws
+    await tracker.tick(at(86));
+    expect(calls).toBe(2);
+    expect(pushes).toEqual([edition(86)]);
+  });
+});

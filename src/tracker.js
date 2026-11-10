@@ -1,7 +1,7 @@
 import {toPages} from './match';
 
 export const STEP_PERCENT = 2; // progress is sent each time you cross a multiple of this many percent of the book
-const NEGATIVE_TTL_MS = 600_000; // re-check an unidentified book after this (you may have added it to Hardcover)
+const RECHECK_MS = 600_000; // look a book up again after this (you may have added it to Hardcover, or its reading entry changed)
 const RETRY_MS = 60_000;
 const RATE_LIMIT_RETRY_MS = 300_000;
 const BUSY_EXPIRY_MS = 60_000;
@@ -28,10 +28,12 @@ export function createTracker({resolve, push, now = Date.now}) {
     if (!(total > 0) || !(page >= 0)) return;
     const step = stepOf(page, total);
     let b = books.get(path);
-    if (b && !b.item && now() - b.checkedAt >= NEGATIVE_TTL_MS) {
+    if (b && now() - b.checkedAt >= RECHECK_MS) {
+      b.checkedAt = now(); // also when resolve throws (offline), so it is not retried on every touch; the old item stays
+      const was = b.item;
       b.item = await resolve(path);
-      b.checkedAt = now();
-      b.step = step;
+      if (!was) b.step = step; // a matched book keeps its step and pending push
+      if (!b.item) b.pending = null; // it left the list: nothing to push
     }
     if (!b) {
       books.set(path, {item: await resolve(path), step, pending: null, retryAt: 0, checkedAt: now()});
