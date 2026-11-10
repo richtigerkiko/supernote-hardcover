@@ -67,6 +67,17 @@ async function permissions() {
 }
 const needPermissions = async () => {
   if (!(await permissions())) throw new Error('permission for files and internet not granted');
+  grantedFlag = true;
+};
+// For touch handlers: only checks, never asks, so a touch can never open a dialog. A true result is remembered.
+let grantedFlag = false;
+async function granted() {
+  if (grantedFlag) return true;
+  for (const [perm] of PERMS) if ((await PluginManager.hasPermission(perm)) !== 1) return false;
+  return (grantedFlag = true);
+}
+const needGranted = async () => {
+  if (!(await granted())) throw new Error('permissions not granted yet');
 };
 
 // ---- EPUB metadata: a few small range reads through fetch -> blob -> slice (the file is never read into JS) ----
@@ -139,23 +150,38 @@ async function readMeta(path) {
 
 // ---- Hardcover: the Currently Reading list (cached) and which item a file is ----
 let reading = {at: 0, list: []};
+let readingGen = 0; // bumped when the list is known stale; a fetch that started before that is not cached
+function dropReadingList() {
+  readingGen++;
+  reading.at = 0;
+}
 async function readingList() {
-  if (Date.now() - reading.at > READING_TTL_MS) reading = {list: await fetchCurrentlyReading(TOKEN), at: Date.now()};
-  return reading.list;
+  if (Date.now() - reading.at <= READING_TTL_MS) return reading.list;
+  const gen = readingGen;
+  const list = await fetchCurrentlyReading(TOKEN);
+  if (gen === readingGen) reading = {list, at: Date.now()};
+  return list;
 }
 async function resolvePath(path) {
-  await needPermissions();
   const meta = await metaFor(path);
   const item = await resolveBook({meta, reading: await readingList(), bookIdsForIsbns: isbns => bookIdsForIsbns(TOKEN, isbns)});
   return withEdition(item, meta.edition); // the edition the reader picked for this file, if any
 }
 
 const tracker = createTracker({
-  resolve: resolvePath,
+  resolve: async path => {
+    await needGranted();
+    return resolvePath(path);
+  },
   push: async (item, pages) => {
-    await needPermissions();
+    await needGranted();
     log('push', item.title, pages);
-    return saveProgress(TOKEN, item, pages);
+    const hadRead = !!item.read;
+    await saveProgress(TOKEN, item, pages).catch(e => {
+      grantedFlag = false; // maybe the grant is gone: the next touch asks hasPermission again
+      throw e;
+    });
+    if (!hadRead) dropReadingList(); // the cached list still says read: null; fetch it again so a forget cannot insert twice
   },
 });
 
@@ -184,8 +210,8 @@ function onTouch() {
   const t = Date.now();
   if (sampling && t - sampling < HUNG_MS) return; // one at a time; a call hung longer than HUNG_MS is abandoned
   sampling = t;
-  sample()
-    .catch(() => null)
+  granted()
+    .then(ok => (ok ? sample().catch(() => null) : null))
     .then(async s => {
       log('touch', s ? `${s.page}/${s.total}` : 'no sample'); // one line per finger-down, visible in logcat only
       // A book that tracking is not switched on for is ignored (null still lets a failed push of another book retry).
@@ -193,7 +219,10 @@ function onTouch() {
       return tracker.tick(on ? s : null);
     })
     .then(stopIfTokenRejected)
-    .catch(e => log('touch error', String(e)))
+    .catch(e => {
+      grantedFlag = false; // maybe the grant is gone: the next touch asks hasPermission again
+      log('touch error', String(e));
+    })
     .finally(() => {
       if (sampling === t) sampling = 0;
     });
@@ -230,6 +259,7 @@ session.api = {
     const s = await (session.pending ?? safeSample());
     session.pending = null;
     if (!s) return {message: 'Open an EPUB in a document to see its Hardcover page.'};
+    await needPermissions();
     const item = await withTimeout(resolvePath(s.path), 20_000, 'book lookup');
     if (!item) return {message: 'This book is not on your Hardcover Currently Reading list.'};
     const book = await withTimeout(fetchBookDetail(TOKEN, item.bookId), 20_000, 'book details');
@@ -259,7 +289,7 @@ session.api = {
   async setStatus(label) {
     await needPermissions();
     await setStatus(TOKEN, current.item.userBookId, STATUS_ID[label]);
-    reading.at = 0; // the list is fetched again, so a book that left Currently Reading stops being tracked
+    dropReadingList(); // the list is fetched again, so a book that left Currently Reading stops being tracked
     tracker.forget(current.path);
   },
   writeReview: () => dialogOk('Writing a review from the device is not available yet.'),
@@ -274,6 +304,7 @@ async function onQuote() {
   if (!text) return say('Select some text first.', false);
   const s = await safeSample();
   if (!s) return say('Open an EPUB to save a quote.', false);
+  await needPermissions();
   const item = await resolvePath(s.path).catch(() => null);
   if (!item) return say('This book is not on your Hardcover Currently Reading list.', false);
   await saveQuote(TOKEN, item, text, s.page + 1, await (await settings()).get('quotePrivacy'));

@@ -24,6 +24,22 @@ const fakeNative = (files = {}, sizes = {}) => {
   return n;
 };
 
+test('a set during a slow first read does not lose the saved entries', async () => {
+  const saved = {'/b.epub': {size: 5, meta: {tracking: true, edition: {id: 1, pages: 9}}}};
+  const n = fakeNative({'/d/c.json': JSON.stringify(saved)}, {'/b.epub': 5, '/c.epub': 7});
+  const read = n.readTextFile;
+  n.readTextFile = async p => {
+    await new Promise(r => setTimeout(r, 20));
+    return read(p);
+  };
+  const cache = createMetaCache(createJsonFile(n, '/d/c.json'), async p => n.stat(p));
+  await Promise.all([cache.get('/b.epub'), cache.set('/c.epub', {title: 'C'})]);
+  n.readTextFile = read;
+  const again = createMetaCache(createJsonFile(n, '/d/c.json'), async p => n.stat(p));
+  expect(await again.get('/b.epub')).toEqual({tracking: true, edition: {id: 1, pages: 9}});
+  expect(await again.get('/c.epub')).toEqual({title: 'C'});
+});
+
 describe('createJsonFile', () => {
   test('a missing file gives the defaults; a save writes JSON and a new instance reads it back', async () => {
     const n = fakeNative();

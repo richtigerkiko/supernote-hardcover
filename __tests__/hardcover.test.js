@@ -69,10 +69,27 @@ test('saveProgress updates the active read when there is one', async () => {
 });
 
 test('saveProgress inserts a new read when there is none', async () => {
-  mockFetch(reply({insert_user_book_read: {error: null}}));
+  mockFetch(reply({insert_user_book_read: {id: 55, error: null}}));
   await saveProgress('T', {...ITEM, read: null}, 120);
   expect(calls[0].variables.ub).toBe(7);
   expect(calls[0].variables.read).toMatchObject({progress_pages: 120, edition_id: 32560293});
+});
+
+test('a second save on the same item updates the read the first one inserted', async () => {
+  mockFetch(reply({insert_user_book_read: {id: 55, error: null}}), reply({update_user_book_read: {error: null}}));
+  const item = {...ITEM, read: null};
+  await saveProgress('T', item, 120);
+  await saveProgress('T', item, 130);
+  expect(calls[0].query).toMatch(/insert_user_book_read/);
+  expect(calls[1].query).toMatch(/update_user_book_read/);
+  expect(calls[1].variables.id).toBe(55);
+});
+
+test('an insert that returns no read id throws and caches nothing', async () => {
+  mockFetch(reply({insert_user_book_read: {id: null, error: null}}));
+  const item = {...ITEM, read: null};
+  await expect(saveProgress('T', item, 120)).rejects.toThrow(/no read id/);
+  expect(item.read).toBeNull();
 });
 
 test('never writes without a real page count', async () => {
