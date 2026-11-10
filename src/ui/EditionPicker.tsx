@@ -1,0 +1,94 @@
+import React, {useState} from 'react';
+import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import type {Edition} from './DetailPage';
+
+// Full-screen "Choose edition" list, shared by the detail page and the journal page. Same e-ink rules as DetailPage.
+
+export const edLine1 = (e: Edition) => `${e.format} · ${e.publisher}`;
+export const edLine2 = (e: Edition) => `${e.year ? `${e.year} · ` : ''}${e.pages} pages · ${e.lang}`;
+
+export function TopBar({title, onBack}: {title: string; onBack: () => void}) {
+  return (
+    <View style={styles.topBar}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Back" style={styles.close} onPress={onBack}>
+        <Text style={styles.closeText}>←</Text>
+      </Pressable>
+      <Text style={styles.title}>{title}</Text>
+    </View>
+  );
+}
+
+export function Item({on, onPress, children}: {on: boolean; onPress: () => void; children: React.ReactNode}) {
+  return (
+    <Pressable accessibilityRole="radio" accessibilityState={{checked: on}} style={[styles.item, on && styles.itemOn]} onPress={onPress}>
+      <View style={styles.radio}>{on ? <View style={styles.radioDot} /> : null}</View>
+      <View style={styles.itemText}>{children}</View>
+    </Pressable>
+  );
+}
+
+type Props = {
+  editions: Edition[];
+  editionId: string;
+  onPick: (editionId: string) => void;
+  onClose: () => void;
+};
+
+export default function EditionPicker({editions, editionId, onPick, onClose}: Props) {
+  const [choice, setChoice] = useState(editionId);
+  const shown = editions.filter(e => !e.audio && e.pages > 0);
+  const hidden = editions.length - shown.length;
+  return (
+    <View style={styles.page}>
+      <TopBar title="Choose edition" onBack={onClose} />
+      <ScrollView>
+        <Text style={styles.pickNote}>
+          {`Pick the edition this file is. Page counts and progress follow it.${hidden ? ` ${hidden} edition${hidden > 1 ? 's' : ''} without a page count hidden.` : ''}`}
+        </Text>
+        {shown.map(e => (
+          <Item key={e.id} on={e.id === choice} onPress={() => setChoice(e.id)}>
+            <Text style={styles.l1}>{edLine1(e)}</Text>
+            <Text style={styles.l2}>{edLine2(e)}</Text>
+            {e.isbn ? <Text style={styles.l2}>{`ISBN ${e.isbn}`}</Text> : null}
+          </Item>
+        ))}
+      </ScrollView>
+      <View style={styles.actions}>
+        <Pressable accessibilityRole="button" style={styles.action} onPress={onClose}>
+          <Text style={styles.actionText}>Cancel</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          style={styles.action}
+          onPress={() => {
+            onPick(choice);
+            onClose();
+          }}>
+          <Text style={styles.actionText}>Use this edition</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+const BLACK = '#000000';
+const WHITE = '#ffffff';
+
+const styles = StyleSheet.create({
+  page: {flex: 1, backgroundColor: WHITE},
+  topBar: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 20, paddingRight: 64, height: 68, borderBottomWidth: 2, borderColor: BLACK}, // right gap: the host's floating home button sits there
+  close: {width: 56, height: 56, alignItems: 'center', justifyContent: 'center'},
+  closeText: {fontSize: 28, color: BLACK},
+  title: {fontSize: 20, color: BLACK, marginRight: 12},
+  l1: {fontSize: 21, fontWeight: '700', color: BLACK},
+  l2: {fontSize: 19, color: BLACK},
+  actions: {flexDirection: 'row', paddingVertical: 16, paddingLeft: 16, paddingRight: 2, borderTopWidth: 2, borderColor: BLACK},
+  action: {flex: 1, height: 68, borderWidth: 3, borderColor: BLACK, alignItems: 'center', justifyContent: 'center', marginRight: 14},
+  actionText: {fontSize: 24, fontWeight: '700', color: BLACK},
+  pickNote: {fontSize: 19, lineHeight: 25, paddingVertical: 14, paddingHorizontal: 24, borderBottomWidth: 2, borderColor: BLACK, color: BLACK},
+  item: {flexDirection: 'row', alignItems: 'center', minHeight: 88, paddingVertical: 10, paddingHorizontal: 24, borderBottomWidth: 2, borderColor: BLACK, backgroundColor: WHITE},
+  itemOn: {borderLeftWidth: 8, paddingLeft: 16},
+  itemText: {flex: 1},
+  radio: {width: 30, height: 30, marginRight: 18, borderWidth: 3, borderColor: BLACK, borderRadius: 15, alignItems: 'center', justifyContent: 'center'},
+  radioDot: {width: 14, height: 14, borderRadius: 7, backgroundColor: BLACK},
+});

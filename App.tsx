@@ -10,6 +10,7 @@ import React, {useEffect, useState} from 'react';
 import {Pressable, Text, View} from 'react-native';
 import {PluginManager} from 'sn-plugin-lib';
 import DetailPage, {BookDetail} from './src/ui/DetailPage';
+import JournalPage from './src/ui/JournalPage';
 import {MOCK_BOOK, MOCK_LONG} from './src/ui/mockBook';
 import {session} from './src/session';
 
@@ -35,6 +36,7 @@ export default function App(): React.JSX.Element {
   const [long, setLong] = useState(false);
   const [book, setBook] = useState<BookDetail | null>(null);
   const [message, setMessage] = useState('Loading…');
+  const [journal, setJournal] = useState<{passage: string} | null>(null); // set: the hardcover-select page is shown
 
   useEffect(() => {
     isFakeSdk().then(setPreview, () => setPreview(false));
@@ -50,11 +52,13 @@ export default function App(): React.JSX.Element {
       setMessage('Loading…');
       setTracking(false);
       setSyncNote('');
-      session.api
-        ?.load()
-        .then((r: any) => {
+      setJournal(null);
+      const isJournal = session.mode === 'journal';
+      Promise.all([session.api?.load(), isJournal ? session.api?.passage() : ''])
+        .then(([r, passage]: any) => {
           if (mine !== latest) return;
           if (r.book) {
+            if (isJournal) setJournal({passage});
             setBook(r.book);
             setTracking(r.tracking);
             setSyncNote(r.sync);
@@ -74,13 +78,25 @@ export default function App(): React.JSX.Element {
   };
 
   if (preview) {
-    // preview only: mock data, the review button flips between the normal and the worst-case mock
+    // preview only: mock data. The review button flips between the normal and the worst-case mock; Close on the detail
+    // page opens the journal card (its Close and saves come back here; every second save fails, to see Retry).
+    if (journal) {
+      return (
+        <JournalPage
+          book={book ?? MOCK_BOOK}
+          passage={journal.passage}
+          onSetEdition={editionId => setBook({...(book ?? MOCK_BOOK), editionId, editionSaved: true})}
+          onSave={() => new Promise((ok, fail) => (Date.now() % 2 ? ok() : fail(new Error('Network request failed'))))}
+          onClose={() => setJournal(null)}
+        />
+      );
+    }
     return (
       <DetailPage
         book={long ? MOCK_LONG : (book ?? MOCK_BOOK)}
         tracking={tracking}
         onToggleTracking={() => setTracking(!tracking)}
-        onClose={close}
+        onClose={() => setJournal({passage: 'Call me Ishmael. Some years ago, never mind how long precisely, having little or no money in my purse, I thought I would sail about a little and see the watery part of the world.'})}
         onWriteReview={() => setLong(l => !l)}
         onSetStatus={status => setBook({...(book ?? MOCK_BOOK), status})}
         onSetEdition={editionId => setBook({...(book ?? MOCK_BOOK), editionId, editionSaved: true})}
@@ -89,6 +105,20 @@ export default function App(): React.JSX.Element {
   }
 
   if (!book) return <Message text={message} onClose={close} />;
+  if (journal) {
+    return (
+      <JournalPage
+        book={book}
+        passage={journal.passage}
+        onSetEdition={editionId => {
+          setBook({...book, editionId, editionSaved: true});
+          session.api?.setEdition(editionId);
+        }}
+        onSave={e => session.api.saveJournal(e)}
+        onClose={close}
+      />
+    );
+  }
   return (
     <DetailPage
       book={book}

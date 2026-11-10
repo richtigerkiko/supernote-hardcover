@@ -11,6 +11,7 @@ It runs fully on the device. The only network traffic is to the Hardcover API.
 - **Uses your edition.** Pick the edition you own and page counts are computed against it. Font size and orientation changes don't matter.
 - **Off by default, per book.** A Tracking toggle on each book's page decides what gets sent.
 - **Book page.** The **Hardcover** toolbar button opens a full-screen page with progress, cover, genres, moods and tags, the description, your reading status and the edition picker. It also shows the last sync, or the error if there was one.
+- **Quotes and notes.** Select text, then tap the plugin's button in the selection toolbar. A card saves the passage as a quote (with your thoughts under it if you add any) or a note to your Hardcover reading journal, on the page you are at. Entries are private unless you choose otherwise.
 
 ## Install
 

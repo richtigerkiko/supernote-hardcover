@@ -40,17 +40,17 @@ export async function fetchUserBooks(token) {
   }));
 }
 
-// A selected passage as a reading-journal quote. PRIVATE (3) by default: the account default is Public.
-// shortcut: QUOTE_EVENT and where the page goes in metadata are NOT yet verified against a real quote entry
-// (the account has none); index.js keeps quotes switched off until a controlled test confirms them.
-export const QUOTE_EVENT = 'quote';
+// A reading-journal entry, event 'quote' or 'note'. PRIVATE (3) by default: the account default is Public.
+// action_at is not sent: the server stamps it.
 export const PRIVACY_PRIVATE = 3;
-const INSERT_JOURNAL = `mutation($o: ReadingJournalCreateType!) { insert_reading_journal(object: $o) { id errors } }`;
+const INSERT_JOURNAL = `mutation($o: ReadingJournalCreateType!) { insert_reading_journal(object: $o) { id errors reading_journal { id } } }`;
 
-export async function saveQuote(token, item, text, page, privacy = PRIVACY_PRIVATE) {
-  if (!text || !text.trim()) throw new Error('refusing to save an empty quote');
-  const object = {book_id: item.bookId, entry: text, event: QUOTE_EVENT, privacy_setting_id: privacy, metadata: {page}};
-  if (item.editionId) object.edition_id = item.editionId;
+export async function saveJournal(token, {bookId, editionId, event, entry, position, privacy = PRIVACY_PRIVATE}) {
+  if (event !== 'quote' && event !== 'note') throw new Error(`refusing to save: unknown journal event ${event}`);
+  if (!entry || !entry.trim()) throw new Error('refusing to save an empty journal entry');
+  const object = {book_id: bookId, event, entry, privacy_setting_id: privacy, tags: []}; // tags is required, even empty
+  if (editionId) object.edition_id = editionId;
+  if (position) object.metadata = {position};
   const data = await gql(token, INSERT_JOURNAL, {o: object});
   const out = data.insert_reading_journal;
   if (out.errors && out.errors.length) throw new Error(`Hardcover: ${JSON.stringify(out.errors)}`);
