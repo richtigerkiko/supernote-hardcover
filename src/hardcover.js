@@ -92,16 +92,21 @@ export async function saveProgress(token, item, pages) {
 }
 
 // Everything the detail page shows about a book, and all its editions (the page hides audiobooks).
-const QUERY_DETAIL = `query($id: Int!) { books_by_pk(id: $id) {
+// `mine` brings the editions the reader already uses even when they are not among the 100 listed (most used first).
+const EDITION_FIELDS = 'id edition_format pages audio_seconds release_date isbn_13 publisher { name } language { language }';
+const QUERY_DETAIL = `query($id: Int!, $ids: [Int!]) { books_by_pk(id: $id) {
   title subtitle rating ratings_count reviews_count description cached_tags image { url }
   contributions(limit: 5) { author { name } }
-  editions(order_by: {id: asc}, limit: 100) { id edition_format pages audio_seconds release_date isbn_13 publisher { name } language { language } }
+  editions(order_by: [{users_count: desc_nulls_last}, {id: asc}], limit: 100) { ${EDITION_FIELDS} }
+  mine: editions(where: {id: {_in: $ids}}) { ${EDITION_FIELDS} }
 } }`;
 
-export async function fetchBookDetail(token, bookId) {
-  const data = await gql(token, QUERY_DETAIL, {id: bookId});
-  if (!data.books_by_pk) throw new Error(`Hardcover: book ${bookId} not found`);
-  return data.books_by_pk;
+export async function fetchBookDetail(token, bookId, editionIds = []) {
+  const data = await gql(token, QUERY_DETAIL, {id: bookId, ids: editionIds});
+  const book = data.books_by_pk;
+  if (!book) throw new Error(`Hardcover: book ${bookId} not found`);
+  const {mine = [], ...rest} = book;
+  return {...rest, editions: [...rest.editions, ...mine.filter(m => !rest.editions.some(e => e.id === m.id))]};
 }
 
 const UPDATE_USER_BOOK = `mutation($id: Int!, $object: UserBookUpdateInput!) { update_user_book(id: $id, object: $object) { id error } }`;
