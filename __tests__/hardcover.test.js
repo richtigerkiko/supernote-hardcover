@@ -72,7 +72,7 @@ test('saveProgress inserts a new read when there is none', async () => {
   mockFetch(reply({insert_user_book_read: {id: 55, error: null}}));
   await saveProgress('T', {...ITEM, read: null}, 120);
   expect(calls[0].variables.ub).toBe(7);
-  expect(calls[0].variables.read).toMatchObject({progress_pages: 120, edition_id: 32560293});
+  expect(calls[0].variables.read).toMatchObject({progress_pages: 120, edition_id: 32560293, started_at: localDate(new Date())});
 });
 
 test('a second save on the same item updates the read the first one inserted', async () => {
