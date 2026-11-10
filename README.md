@@ -1,41 +1,35 @@
-# HardcoverSync
+# HardcoverSync (Supernote plugin)
 
-### Read on your Supernote. Your Hardcover shelf keeps up on its own.
+Keeps your [Hardcover](https://hardcover.app) reading progress up to date while you read EPUBs in DOC on a Supernote. Switch it on for a book, then just read.
 
-You turn pages. Hardcover knows where you are. That's the whole job.
+It runs fully on the device. The only network traffic is to the Hardcover API.
 
-HardcoverSync watches the EPUB open on your Supernote and quietly updates your reading progress on [Hardcover](https://hardcover.app). No timers to start, no "update progress" screen to visit, no phone to pick up after a chapter.
+## What it does
 
-## Why you'll like it
+- **Tracks the book you have open.** Progress is sent each time you cross a 2% step of the book, forwards or backwards. A few pages inside one step never push, so flipping back to re-read is harmless.
+- **Finds the book by itself.** Title, author and ISBN come from the EPUB's metadata, not the filename, and are matched against your Hardcover library.
+- **Uses your edition.** Pick the edition you own and page counts are computed against it. Font size and orientation changes don't matter.
+- **Off by default, per book.** A Tracking toggle on each book's page decides what gets sent.
+- **Book page.** The **Hardcover** toolbar button opens a full-screen page with progress, cover, genres, moods and tags, the description, your reading status and the edition picker. It also shows the last sync, or the error if there was one.
 
-- **It disappears.** Switch it on for a book once. After that, just read. There is no button to press and nothing to remember.
-- **Your page, not a guess.** Progress is your real position in the book, mapped onto the edition you own. Change the font size or flip the orientation and it still lands on the right page.
-- **Calm, not chatty.** It reports each time you cross a 2% step of the book, in either direction. Flip back to re-read a paragraph and your feed stays quiet.
-- **It knows which book you're in.** It reads the title, author and ISBN from the EPUB itself, never the filename, then finds the matching book in your Hardcover library.
-- **Your edition, your page count.** Pick the exact edition you're holding from a list, and progress is measured against it.
-- **Per book, off by default.** Tracking is a toggle on each book's page. Nothing is sent for a book you haven't switched on.
+## Install
 
-## One page for the book you're reading
+Copy `HardcoverSync.snplg` to the device's `MyStyle` folder, then Settings > Apps > Plugins > Add Plugin and select it. Open an EPUB, tap **Hardcover**, and turn Tracking on.
 
-Tap the **Hardcover** button in the toolbar and a full-screen page opens, made for e-ink: black on white, big tap targets, no scrolling in the usual case.
+## Build from source
 
-- Progress bar with your current page
-- Cover, author, genres, moods and tags
-- Your reading status, changed in one tap (with a confirmation, so you never move a book by accident)
-- Edition picker
-- The book's description
-- A fixed **Write review** bar at the bottom
-- The last sync at a glance: "Last sync: page 214", or a plain message if something needs attention
+Needs Node, JDK 17 and the Android SDK (platform 35, build-tools 35.0.0, NDK 27.1.12297006), and your Hardcover API token as `HARDCOVER_KEY` in `../../.env`.
 
-## Built for the Supernote
+```powershell
+npm install
+npm run build   # writes build\outputs\HardcoverSync.snplg
+npm test
+```
 
-Pages turn at e-ink speed and the plugin keeps out of the way. It works from your touches rather than timers, so it never wakes the device on its own. It reads only a few kilobytes of each book, and it remembers what it learned, so the second touch is fast.
+The token is bundled into the package, so don't share a built `.snplg`.
 
-## Get started
+## Notes
 
-1. Install the plugin on your Nomad.
-2. Open an EPUB in DOC and tap **Hardcover**.
-3. Flip **Tracking** on.
-4. Read.
-
-> This is a personal build. It carries its owner's Hardcover API token, so never share a built `.snplg`. How it works, building and device notes live in [CLAUDE.md](CLAUDE.md).
+- EPUB only. PDFs are not supported yet.
+- Tracking follows your touches, not a timer, so a page turned at the last tap is reported at your next touch.
+- How it works, measurements from the device and build details are in [CLAUDE.md](CLAUDE.md).
