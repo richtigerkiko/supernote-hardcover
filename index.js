@@ -67,6 +67,17 @@ async function permissions() {
 }
 const needPermissions = async () => {
   if (!(await permissions())) throw new Error('permission for files and internet not granted');
+  grantedFlag = true;
+};
+// For touch handlers: only checks, never asks, so a touch can never open a dialog. A true result is remembered.
+let grantedFlag = false;
+async function granted() {
+  if (grantedFlag) return true;
+  for (const [perm] of PERMS) if ((await PluginManager.hasPermission(perm)) !== 1) return false;
+  return (grantedFlag = true);
+}
+const needGranted = async () => {
+  if (!(await granted())) throw new Error('permissions not granted yet');
 };
 
 // ---- EPUB metadata: a few small range reads through fetch -> blob -> slice (the file is never read into JS) ----
@@ -151,9 +162,12 @@ async function resolvePath(path) {
 }
 
 const tracker = createTracker({
-  resolve: resolvePath,
+  resolve: async path => {
+    await needGranted();
+    return resolvePath(path);
+  },
   push: async (item, pages) => {
-    await needPermissions();
+    await needGranted();
     log('push', item.title, pages);
     const hadRead = !!item.read;
     await saveProgress(TOKEN, item, pages);
@@ -186,8 +200,8 @@ function onTouch() {
   const t = Date.now();
   if (sampling && t - sampling < HUNG_MS) return; // one at a time; a call hung longer than HUNG_MS is abandoned
   sampling = t;
-  sample()
-    .catch(() => null)
+  granted()
+    .then(ok => (ok ? sample().catch(() => null) : null))
     .then(async s => {
       log('touch', s ? `${s.page}/${s.total}` : 'no sample'); // one line per finger-down, visible in logcat only
       // A book that tracking is not switched on for is ignored (null still lets a failed push of another book retry).
