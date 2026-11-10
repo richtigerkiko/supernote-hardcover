@@ -310,14 +310,15 @@ session.api = {
     tracker.forget(current.path);
   },
   async setStatus(label) {
+    const c = current; // a newer load may replace `current` while we wait
     // Paused, Did not finish and Finished take the book off the list the plugin works from, and only hardcover.app undoes that.
     if (label !== 'Currently reading' && !(await dialog('This takes the book off your Currently Reading list. You can only undo it on hardcover.app.', 'Cancel', 'Change', false))) {
       throw new Error('status change cancelled');
     }
     await needPermissions();
-    await setStatus(TOKEN, current.item.userBookId, STATUS_ID[label]);
+    await setStatus(TOKEN, c.item.userBookId, STATUS_ID[label]);
     dropReadingList(); // the list is fetched again, so a book that left Currently Reading stops being tracked
-    tracker.forget(current.path);
+    tracker.forget(c.path);
   },
   writeReview: () => dialogOk('Writing a review from the device is not available yet.'),
 };
