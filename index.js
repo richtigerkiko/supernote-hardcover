@@ -16,7 +16,7 @@ import {cleanQuote} from './src/quote';
 import {resolveBook} from './src/resolve';
 import {createJsonFile, createMetaCache, createSettings} from './src/store';
 import {createTracker} from './src/tracker';
-import {bookIdsForIsbns, fetchBookDetail, fetchUserBooks, saveProgress, saveQuote, setStatus} from './src/hardcover';
+import {bookIdsForIsbns, fetchBookDetail, fetchUserBooks, saveProgress, saveQuote, saveReview, setStatus} from './src/hardcover';
 
 AppRegistry.registerComponent(appName, () => App);
 
@@ -316,7 +316,15 @@ session.api = {
     dropReadingList(); // the list is fetched again so the new status shows
     tracker.forget(c.path);
   },
-  writeReview: () => dialogOk('Writing a review from the device is not available yet.'),
+  // Reviews are public by default on Hardcover, so ask first; false = declined (the editor stays open).
+  async writeReview(r) {
+    const c = current;
+    const ok = await dialog(`Post this review of "${c.item.title}" to Hardcover? Reviews are public by default.`, 'Cancel', 'Post', false);
+    if (!ok) return false;
+    await needPermissions();
+    await saveReview(TOKEN, c.item.userBookId, r);
+    return true;
+  },
 };
 
 // ---- selection button: save the selected passage as a quote ----

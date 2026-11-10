@@ -1,7 +1,7 @@
 const URL = 'https://api.hardcover.app/v1/graphql';
 
 const QUERY_READING = `query { me { user_books {
-  id book_id edition_id status_id
+  id book_id edition_id status_id rating review_raw review_has_spoilers
   book { title contributions(limit: 5) { author { name } } }
   edition { id pages }
   user_book_reads(order_by: {id: desc}, limit: 1) { id started_at finished_at progress_pages edition_id }
@@ -32,6 +32,9 @@ export async function fetchUserBooks(token) {
     userBookId: u.id,
     bookId: u.book_id,
     statusId: u.status_id,
+    myRating: u.rating ?? null,
+    myReview: u.review_raw ?? '',
+    mySpoilers: !!u.review_has_spoilers,
     title: u.book.title,
     authors: u.book.contributions.map(c => c.author.name),
     editionId: u.edition_id ?? u.edition?.id ?? null,
@@ -117,5 +120,16 @@ const UPDATE_USER_BOOK = `mutation($id: Int!, $object: UserBookUpdateInput!) { u
 
 export async function setStatus(token, userBookId, statusId) {
   const data = await gql(token, UPDATE_USER_BOOK, {id: userBookId, object: {status_id: statusId}});
+  if (data.update_user_book.error) throw new Error(`Hardcover: ${data.update_user_book.error}`);
+}
+
+// A review and star rating on the reader's own user_book. Field names (rating, review_has_spoilers, review_raw on the
+// user_books type; update_user_book(id, object: UserBookUpdateInput)) are from Hardcover's GraphQL docs,
+// https://docs.hardcover.app/api/graphql/schemas/userbooks/ . The docs page could not be fetched while writing this, so
+// the WRITE field name for the text is unverified (`review` per community examples; reads use review_raw): check it
+// once against a real account before relying on it. Ratings are 0.5 steps; null clears the rating. Reviews are PUBLIC by default.
+export async function saveReview(token, userBookId, {text, rating, spoilers}) {
+  const object = {review: text.trim(), rating: rating > 0 ? rating : null, review_has_spoilers: !!spoilers};
+  const data = await gql(token, UPDATE_USER_BOOK, {id: userBookId, object});
   if (data.update_user_book.error) throw new Error(`Hardcover: ${data.update_user_book.error}`);
 }

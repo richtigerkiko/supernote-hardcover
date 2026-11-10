@@ -19,7 +19,7 @@ const render = (props: any) => {
   const noop = () => {};
   act(() => {
     tree = ReactTestRenderer.create(
-      <DetailPage book={MOCK_BOOK} tracking={true} onToggleTracking={noop} onClose={noop} onWriteReview={noop} onSetStatus={noop} onSetEdition={noop} {...props} />,
+      <DetailPage book={MOCK_BOOK} tracking={true} onToggleTracking={noop} onClose={noop} onSaveReview={async () => true} onSetStatus={noop} onSetEdition={noop} {...props} />,
     );
   });
   return tree;
@@ -47,14 +47,44 @@ test('the toggle shows OFF when tracking is paused and calls back when pressed',
   expect(onToggle).toHaveBeenCalledTimes(1);
 });
 
-test('close and Write review call back', () => {
-  const onClose = jest.fn();
-  const onReview = jest.fn();
-  const tree = render({onClose, onWriteReview: onReview});
-  press(tree, 'Close');
+test('Write review opens the editor; Save sends the draft and returns to the page when saved', async () => {
+  const onSaveReview = jest.fn(async () => true);
+  const tree = render({onSaveReview});
   const review = tree.root.findAll((n: any) => n.props.accessibilityRole === 'button' && typeof n.props.onPress === 'function' && texts(n).includes('Write review'))[0];
   act(() => review.props.onPress());
-  expect([onClose.mock.calls.length, onReview.mock.calls.length]).toEqual([1, 1]);
+  expect(all(tree)).toContain('Contains spoilers');
+  act(() => tree.root.findByProps({accessibilityLabel: 'Review text'}).props.onChangeText('Great'));
+  press(tree, 'Star 4');
+  press(tree, 'Star 4'); // half star
+  press(tree, 'Contains spoilers');
+  await act(async () => tree.root.findByProps({accessibilityLabel: 'Save review'}).props.onPress());
+  expect(onSaveReview).toHaveBeenCalledWith({text: 'Great', rating: 3.5, spoilers: true});
+  expect(all(tree)).toContain('Write review'); // back on the detail page
+  expect(all(tree)).not.toContain('Contains spoilers');
+});
+
+test('the editor is prefilled, stays open when the save is declined or fails, and will not save nothing', async () => {
+  const onSaveReview = jest.fn().mockResolvedValueOnce(false).mockRejectedValueOnce(new Error('boom'));
+  const tree = render({onSaveReview, book: {...MOCK_BOOK, myReview: 'Old', myRating: 5}});
+  const review = tree.root.findAll((n: any) => n.props.accessibilityRole === 'button' && texts(n).includes('Write review'))[0];
+  act(() => review.props.onPress());
+  expect(tree.root.findByProps({accessibilityLabel: 'Review text'}).props.value).toBe('Old');
+  const save = () => act(async () => tree.root.findByProps({accessibilityLabel: 'Save review'}).props.onPress());
+  await save();
+  expect(all(tree)).toContain('Contains spoilers');
+  await save();
+  expect(all(tree)).toContain('boom');
+  act(() => tree.root.findByProps({accessibilityLabel: 'Review text'}).props.onChangeText(''));
+  press(tree, 'Star 5'); // 5 -> 4.5
+  press(tree, 'Star 5'); // 4.5 -> none
+  await save();
+  expect(onSaveReview).toHaveBeenCalledTimes(2);
+});
+
+test('close calls back', () => {
+  const onClose = jest.fn();
+  press(render({onClose}), 'Close');
+  expect(onClose).toHaveBeenCalled();
 });
 
 test('the status list sets the status and returns to the page', () => {

@@ -42,7 +42,10 @@ test('fetchUserBooks flattens the response', async () => {
       userBookId: 7,
       bookId: 2312000,
       statusId: 2,
-      title: 'The Butcher of Nazareth',
+      statusId: 2,
+      myRating: null,
+      myReview: '',
+      mySpoilers: false,
       authors: ['David Scott Hay'],
       editionId: 32560293,
       editionPages: 330,
@@ -127,4 +130,19 @@ test('fetchBookDetail adds an edition that only comes back under mine, once', as
   expect(book.editions.map(e => e.id)).toEqual([1, 2, 300]);
   expect(book.mine).toBeUndefined();
   expect(calls[0].variables).toEqual({id: 5, ids: [2, 300]});
+});
+
+test('saveReview sends text, rating and spoiler flag on update_user_book; no rating clears it', async () => {
+  const {saveReview} = require('../src/hardcover');
+  mockFetch(reply({update_user_book: {id: 7, error: null}}), reply({update_user_book: {id: 7, error: 'nope'}}));
+  await saveReview('T', 7, {text: ' Great ', rating: 3.5, spoilers: true});
+  expect(calls[0].variables).toEqual({id: 7, object: {review: 'Great', rating: 3.5, review_has_spoilers: true}});
+  await expect(saveReview('T', 7, {text: 'x', rating: 0, spoilers: false})).rejects.toThrow('nope');
+  expect(calls[1].variables.object.rating).toBeNull();
+});
+
+test('fetchUserBooks carries the existing rating and review', async () => {
+  mockFetch(reply({me: [{user_books: [{id: 1, book_id: 2, status_id: 2, rating: 4.5, review_raw: 'R', review_has_spoilers: true, book: {title: 'T', contributions: []}, user_book_reads: []}]}]}));
+  const [b] = await fetchUserBooks('T');
+  expect([b.myRating, b.myReview, b.mySpoilers]).toEqual([4.5, 'R', true]);
 });

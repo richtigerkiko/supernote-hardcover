@@ -1,4 +1,5 @@
 import React, {useState} from 'react';
+import ReviewEditor, {ReviewDraft} from './ReviewEditor';
 import {Image, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 
 // Book detail page, ported from the design artifact. Presentational only: no SDK imports, everything arrives as props,
@@ -35,8 +36,12 @@ export type BookDetail = {
   editionId: string; // the chosen edition
   editionSaved: boolean; // false: our best guess, not confirmed by the reader
   editionIsbn?: boolean; // the file's own ISBN names this edition
+  myRating?: number | null; // the reader's own rating, 0.5 steps
+  myReview?: string;
+  mySpoilers?: boolean;
 };
 
+export type {ReviewDraft};
 export const STATUSES = ['Want to read', 'Currently reading', 'Paused', 'Did not finish', 'Finished'];
 
 type Props = {
@@ -45,7 +50,8 @@ type Props = {
   syncNote?: string; // last sync or why tracking is not working, shown above the progress bar
   onToggleTracking: () => void;
   onClose: () => void;
-  onWriteReview: () => void;
+  // true: saved; false: the reader declined the confirmation (the editor stays open); rejects with the error
+  onSaveReview: (r: ReviewDraft) => Promise<boolean>;
   onSetStatus: (status: string) => void;
   onSetEdition: (editionId: string) => void;
 };
@@ -155,13 +161,25 @@ function Item({on, onPress, children}: {on: boolean; onPress: () => void; childr
   );
 }
 
-export default function DetailPage({book, tracking, syncNote, onToggleTracking, onClose, onWriteReview, onSetStatus, onSetEdition}: Props) {
-  const [view, setView] = useState<'detail' | 'status' | 'editions'>('detail');
+export default function DetailPage({book, tracking, syncNote, onToggleTracking, onClose, onSaveReview, onSetStatus, onSetEdition}: Props) {
+  const [view, setView] = useState<'detail' | 'status' | 'editions' | 'review'>('detail');
   const [pending, setPending] = useState<string | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [aboutLong, setAboutLong] = useState(false);
 
   const ed = book.editions.find(e => e.id === book.editionId) ?? book.editions[0];
+
+  if (view === 'review') {
+    return (
+      <ReviewEditor
+        initial={{text: book.myReview ?? '', rating: book.myRating ?? 0, spoilers: !!book.mySpoilers}}
+        onCancel={() => setView('detail')}
+        onSave={async r => {
+          if (await onSaveReview(r)) setView('detail');
+        }}
+      />
+    );
+  }
 
   if (view === 'status') {
     return (
@@ -309,7 +327,7 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
         <Pressable accessibilityRole="button" accessibilityLabel="Change reading status" style={styles.action} onPress={() => setView('status')}>
           <Text style={styles.actionText}>{`${book.status} ▾`}</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" style={styles.action} onPress={onWriteReview}>
+        <Pressable accessibilityRole="button" style={styles.action} onPress={() => setView('review')}>
           <Text style={styles.actionText}>Write review</Text>
         </Pressable>
       </View>
