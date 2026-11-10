@@ -17,9 +17,10 @@ async function gql(token, query, variables) {
     headers: {'content-type': 'application/json', authorization: `Bearer ${token}`},
     body: JSON.stringify({query, variables}),
   });
-  if (res.status === 401) throw new Error('Hardcover token rejected (401): reset or expired');
-  if (res.status === 429) throw new Error('Hardcover rate limit (429)');
-  if (!res.ok) throw new Error(`Hardcover HTTP ${res.status}`);
+  const fail = msg => Object.assign(new Error(msg), {status: res.status}); // callers branch on status, not on the text
+  if (res.status === 401) throw fail('Hardcover token rejected (401): reset or expired');
+  if (res.status === 429) throw fail('Hardcover rate limit (429)');
+  if (!res.ok) throw fail(`Hardcover HTTP ${res.status}`);
   const json = await res.json();
   if (json.errors) throw new Error(`Hardcover: ${json.errors[0].message}`);
   return json.data;

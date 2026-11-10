@@ -13,7 +13,7 @@ const setup = ({item = BUTCHER, pushFails} = {}) => {
     now: () => t,
     resolve: async path => (resolves.push(path), item),
     push: async (it, pages) => {
-      if (pushFails) throw new Error(pushFails);
+      if (pushFails) throw typeof pushFails === 'string' ? new Error(pushFails) : pushFails;
       pushes.push(pages);
     },
   });
@@ -119,7 +119,7 @@ test('a failed push keeps the page and is retried after a pause, also from a tou
 });
 
 test('a rate limit (429) waits longer than another error', async () => {
-  const {tracker, pushes, advance} = setup({pushFails: 'Hardcover rate limit (429)'});
+  const {tracker, pushes, advance} = setup({pushFails: Object.assign(new Error('Hardcover rate limit (429)'), {status: 429})});
   await tracker.tick(at(81));
   await tracker.tick(at(86));
   expect(tracker.state.lastError.message).toMatch(/429/);

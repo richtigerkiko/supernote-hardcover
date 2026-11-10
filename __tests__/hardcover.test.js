@@ -109,7 +109,7 @@ test.each([
   [500, /HTTP 500/],
 ])('HTTP %i is an error, not a silent success', async (status, msg) => {
   mockFetch(reply(null, status));
-  await expect(saveProgress('T', ITEM, 120)).rejects.toThrow(msg);
+  await expect(saveProgress('T', ITEM, 120)).rejects.toMatchObject({status, message: expect.stringMatching(msg)});
 });
 
 test('a GraphQL error or an error field in the result throws', async () => {

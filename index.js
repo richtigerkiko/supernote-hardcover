@@ -251,7 +251,7 @@ PluginManager.registerMotionListener(1, {
 
 // A rejected token will not fix itself: stop instead of retrying on every touch.
 function stopIfTokenRejected() {
-  if (tokenOk && /401/.test(tracker.state.lastError?.message ?? '')) {
+  if (tokenOk && tracker.state.lastError?.status === 401) {
     tokenOk = false;
     log('token rejected: tracking stopped');
   }

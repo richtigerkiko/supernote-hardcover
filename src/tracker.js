@@ -65,7 +65,7 @@ export function createTracker({resolve, push, now = Date.now}) {
         state.lastPush = {path, title: item.title, pages: p.pages, at: now()};
         state.lastError = null;
       } catch (e) {
-        b.retryAt = now() + (/429/.test(e.message) ? RATE_LIMIT_RETRY_MS : RETRY_MS);
+        b.retryAt = now() + (e.status === 429 ? RATE_LIMIT_RETRY_MS : RETRY_MS);
         state.lastError = e;
         e.path = path; // lets the page show the error only for this file
       }
