@@ -260,12 +260,12 @@ function stopIfTokenRejected() {
 // ---- the detail page: App.tsx calls these through src/session.js (same JS runtime) ----
 let current = null; // {path, item, detail} of the book the page was opened on
 // One line for the page: why tracking is not working, or the last push. lastPush and lastError are shared by all books,
-// so they show only for the book that is open (an error with no title, such as a failed lookup, shows for any).
-const syncNote = title => {
+// so they show only for the file that is open.
+const syncNote = path => {
   if (!tokenOk) return 'Token rejected, tracking stopped';
   const {lastError: e, lastPush: p} = tracker.state;
-  if (e && (!e.title || e.title === title)) return e.message;
-  return p?.title === title ? `Last sync: page ${p.pages}` : '';
+  if (e?.path === path) return e.message;
+  return p?.path === path ? `Last sync: page ${p.pages}` : '';
 };
 const dialogOk = tip => dialog(tip, 'OK', 'Close', false).catch(() => {});
 session.api = {
@@ -286,7 +286,7 @@ session.api = {
     const book = await withTimeout(fetchBookDetail(TOKEN, item.bookId, editionIds), 20_000, 'book details');
     const detail = buildDetail({book, item, saved: meta.edition, sample: s, isbns: isbnsIn((meta.ids ?? []).join(' '))});
     current = {path: s.path, item, detail};
-    return {book: detail, tracking: meta.tracking === true, sync: syncNote(item.title)};
+    return {book: detail, tracking: meta.tracking === true, sync: syncNote(s.path)};
   },
   // Tracking is remembered per file like the edition. Turning it on starts from the page the book is at now (nothing is
   // sent for it); turning it off drops anything not yet sent.

@@ -239,9 +239,39 @@ describe('re-check of matched books', () => {
   });
 });
 
-test('errors name the book they belong to', async () => {
+test('errors and the last push name the file they belong to', async () => {
   const {tracker} = setup({pushFails: 'Hardcover HTTP 500'});
   await tracker.tick(at(81));
   await tracker.tick(at(86));
-  expect(tracker.state.lastError.title).toBe(BUTCHER.title);
+  expect(tracker.state.lastError.path).toBe(PATH);
+});
+
+test('a lookup error names the file, and a push that settles after the book left the list does not throw', async () => {
+  let t = 1_000_000;
+  let item = BUTCHER;
+  let release;
+  let slow = false;
+  const tracker = createTracker({
+    now: () => t,
+    resolve: async () => { if (item === 'offline') throw new Error('offline'); return item; },
+    push: async () => { if (slow) await new Promise(r => (release = r)); },
+  });
+  await tracker.tick(at(81));
+  t += 601_000;
+  item = 'offline';
+  await tracker.tick(at(81));
+  expect(tracker.state.lastError).toMatchObject({message: 'offline', path: PATH});
+  item = BUTCHER;
+  await tracker.tick(at(86)); // pushes, fast
+  expect(tracker.state.lastPush.path).toBe(PATH);
+  slow = true;
+  const hung = tracker.tick(at(111)); // crossing: a push that hangs
+  while (!release) await Promise.resolve(); // until the push is hanging
+  t += 61_000; // the hung tick expires, a new one re-checks and the book is gone
+  item = null;
+  t += 601_000;
+  await tracker.tick(at(111));
+  release();
+  await hung;
+  expect(tracker.state.lastError).toBeNull(); // the late push counts as done; no TypeError from b.item being null by now
 });

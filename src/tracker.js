@@ -47,26 +47,27 @@ export function createTracker({resolve, push, now = Date.now}) {
     const pages = toPages(page, total, b.item.editionPages);
     if (pages === null) {
       b.pending = null;
-      state.lastError = Object.assign(new Error(`no page count for ${b.item.title}`), {title: b.item.title});
+      state.lastError = Object.assign(new Error(`no page count for ${b.item.title}`), {path});
       return;
     }
     b.pending = {pages, step};
   }
 
   async function sweep() {
-    for (const b of books.values()) {
+    for (const [path, b] of books) {
       const p = b.pending;
       if (!p || now() < b.retryAt) continue;
+      const item = b.item; // a re-check can null b.item while a slow push is still hanging
       try {
-        await push(b.item, p.pages);
+        await push(item, p.pages);
         b.step = p.step;
         b.pending = null;
-        state.lastPush = {title: b.item.title, pages: p.pages, at: now()};
+        state.lastPush = {path, title: item.title, pages: p.pages, at: now()};
         state.lastError = null;
       } catch (e) {
         b.retryAt = now() + (/429/.test(e.message) ? RATE_LIMIT_RETRY_MS : RETRY_MS);
         state.lastError = e;
-        e.title = b.item.title; // lets the page show the error only for this book
+        e.path = path; // lets the page show the error only for this file
       }
     }
   }
@@ -85,6 +86,7 @@ export function createTracker({resolve, push, now = Date.now}) {
             await observe(sample);
           } catch (e) {
             state.lastError = e;
+            e.path = sample.path;
           }
         }
         await sweep();
