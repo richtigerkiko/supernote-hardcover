@@ -82,7 +82,7 @@ test('the edition list hides audiobooks, and Use this edition saves the pick', (
   const tree = render({onSetEdition});
   press(tree, 'Change edition');
   const t = all(tree);
-  expect(t).toContain('1 audiobook edition hidden.');
+  expect(t).toContain('1 edition without a page count hidden.');
   expect(t).not.toContain('Audible');
   const kindle = tree.root.findAll((n: any) => n.props.accessibilityRole === 'radio' && texts(n).join('').includes('Kindle'))[0];
   act(() => kindle.props.onPress());
@@ -104,4 +104,13 @@ test('the worst case (no cover, no rating, long text) renders without breaking, 
   const t = texts(render({book: MOCK_LONG}).toJSON());
   expect(t.filter(s => s.includes('Extraordinarily Long Title')).length).toBe(2); // heading + cover placeholder
   expect(t.join('|')).not.toContain('★');
+});
+
+test('an edition with no page count is not listed', () => {
+  const book = {...MOCK_BOOK, editions: [...MOCK_BOOK.editions, {id: 'np', format: 'Ebook', publisher: 'NoPages Press', year: 2020, pages: 0, lang: 'English'}]};
+  const tree = render({book});
+  press(tree, 'Change edition');
+  const t = all(tree);
+  expect(t).not.toContain('NoPages Press');
+  expect(t).toContain('2 editions without a page count hidden.');
 });

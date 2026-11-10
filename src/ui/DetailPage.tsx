@@ -185,7 +185,7 @@ export default function DetailPage({book, tracking, onToggleTracking, onClose, o
 
   if (view === 'editions') {
     const choice = pending ?? book.editionId;
-    const shown = book.editions.filter(e => !e.audio);
+    const shown = book.editions.filter(e => !e.audio && e.pages > 0);
     const hidden = book.editions.length - shown.length;
     const close = () => {
       setView('detail');
@@ -196,7 +196,7 @@ export default function DetailPage({book, tracking, onToggleTracking, onClose, o
         <TopBar title="Choose edition" onBack={close} />
         <ScrollView>
           <Text style={styles.pickNote}>
-            {`Pick the edition this file is. Page counts and progress follow it.${hidden ? ` ${hidden} audiobook edition${hidden > 1 ? 's' : ''} hidden.` : ''}`}
+            {`Pick the edition this file is. Page counts and progress follow it.${hidden ? ` ${hidden} edition${hidden > 1 ? 's' : ''} without a page count hidden.` : ''}`}
           </Text>
           {shown.map(e => (
             <Item key={e.id} on={e.id === choice} onPress={() => setPending(e.id)}>
