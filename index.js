@@ -150,9 +150,17 @@ async function readMeta(path) {
 
 // ---- Hardcover: the Currently Reading list (cached) and which item a file is ----
 let reading = {at: 0, list: []};
+let readingGen = 0; // bumped when the list is known stale; a fetch that started before that is not cached
+function dropReadingList() {
+  readingGen++;
+  reading.at = 0;
+}
 async function readingList() {
-  if (Date.now() - reading.at > READING_TTL_MS) reading = {list: await fetchCurrentlyReading(TOKEN), at: Date.now()};
-  return reading.list;
+  if (Date.now() - reading.at <= READING_TTL_MS) return reading.list;
+  const gen = readingGen;
+  const list = await fetchCurrentlyReading(TOKEN);
+  if (gen === readingGen) reading = {list, at: Date.now()};
+  return list;
 }
 async function resolvePath(path) {
   const meta = await metaFor(path);
@@ -173,7 +181,7 @@ const tracker = createTracker({
       grantedFlag = false; // maybe the grant is gone: the next touch asks hasPermission again
       throw e;
     });
-    if (!hadRead) reading.at = 0; // the cached list still says read: null; fetch it again so a forget cannot insert twice
+    if (!hadRead) dropReadingList(); // the cached list still says read: null; fetch it again so a forget cannot insert twice
   },
 });
 
@@ -281,7 +289,7 @@ session.api = {
   async setStatus(label) {
     await needPermissions();
     await setStatus(TOKEN, current.item.userBookId, STATUS_ID[label]);
-    reading.at = 0; // the list is fetched again, so a book that left Currently Reading stops being tracked
+    dropReadingList(); // the list is fetched again, so a book that left Currently Reading stops being tracked
     tracker.forget(current.path);
   },
   writeReview: () => dialogOk('Writing a review from the device is not available yet.'),
