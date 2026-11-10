@@ -180,11 +180,15 @@ export async function searchBooks(token: string, query: string): Promise<Catalog
 // Having the EPUB means owning the book: mark one of its editions as owned (Owned list only, no library entry; checked
 // 2026-11-10), then add the book. A library entry cannot be made without a status: the server gives Want to Read
 // (checked 2026-11-10), so this is only called for a book with no entry yet. `imported` keeps it out of followers' feeds.
+// The edition is also put on the new entry, and returned so the caller can use its page count for this file.
 // shortcut: with no ISBN match the owned edition is the first one with a page count, else the first; upgrade if it matters.
-export async function addOwned(token: string, bookId: number, editionId?: number): Promise<void> {
+export async function addOwned(token: string, bookId: number, editionId?: number): Promise<{id: number; pages: number | null}> {
   const c = sdk(token);
   const listed = editionId ? [] : (await c.books.editions(bookId, {limit: EDITIONS_SHOWN})).items;
-  const edition = editionId ?? (listed.find(e => (e.pages ?? 0) > 0) ?? listed[0])?.id;
-  if (edition) await c.library.markOwned(edition); // safe to repeat, so a failed add below can simply be retried
-  await c.library.add(bookId, {imported: true});
+  const edition = editionId ? await c.books.edition(editionId) : (listed.find(e => (e.pages ?? 0) > 0) ?? listed[0]);
+  // Nothing to own means nothing is written: an unowned entry would never be retried, it is found in the library next time.
+  if (!edition) throw new Error('Hardcover has no edition of this book to mark as owned');
+  await c.library.markOwned(edition.id); // safe to repeat, so a failed add below can simply be retried
+  await c.library.add(bookId, {imported: true, editionId: edition.id});
+  return {id: edition.id, pages: edition.pages ?? null};
 }

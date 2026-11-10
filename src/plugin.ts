@@ -169,14 +169,26 @@ async function resolvePath(path: string) {
 
 const saveMeta = async (path: string, meta: FileMeta) => (await persistentMetaCache().catch(() => null))?.set(path, meta).catch(() => {});
 
+// The library entry for a catalogue book, from a freshly fetched list: a failed match (missing author, ambiguous title) or
+// the cached list can hide an entry that exists, and an existing entry must never be written to here.
+async function libraryItem(bookId: number) {
+  dropReadingList();
+  return (await readingList()).find(r => r.bookId === bookId) ?? null;
+}
+
 // Having the EPUB means owning the book: add the catalogue book `link` to the library (Want to Read) with its edition
-// marked as owned, and return its new library item.
+// marked as owned, and return its library item. The edition (when it has pages) is saved for this file, so tracking
+// has a page count without a manual edition change.
 async function addToLibrary(path: string, meta: FileMeta, link: {bookId: number; editionId?: number}) {
-  await withTimeout(addOwned(TOKEN, link.bookId, link.editionId), 20_000, 'add to library');
+  let item = await libraryItem(link.bookId);
+  if (!item) {
+    const ed = await withTimeout(addOwned(TOKEN, link.bookId, link.editionId), 20_000, 'add to library');
+    if (ed.pages && !meta.edition) meta.edition = {id: ed.id, pages: ed.pages};
+    item = await libraryItem(link.bookId);
+  }
   delete meta.linked;
   await saveMeta(path, meta);
-  dropReadingList();
-  return withEdition((await readingList()).find(r => r.bookId === link.bookId) ?? null, meta.edition);
+  return withEdition(item, meta.edition);
 }
 
 // A book that is in no library list: find it in the whole catalogue (like KOReader's link) and remember the link per file
@@ -195,6 +207,8 @@ async function linkFromCatalogue(path: string): Promise<ReadingItem | null> {
     );
     if (!found) return null;
     link = found;
+    const existing = await libraryItem(link.bookId);
+    if (existing) return withEdition(existing, meta.edition); // it was on the shelves after all: nothing to ask or write
     const book = await withTimeout(fetchBookDetail(TOKEN, link.bookId), 20_000, 'book details');
     const yes = await dialog(`"${book.title}" is not in your Hardcover library. Add it as Want to Read and mark your copy as owned?`, 'No', 'Yes', false);
     if (yes) return addToLibrary(path, meta, link);
