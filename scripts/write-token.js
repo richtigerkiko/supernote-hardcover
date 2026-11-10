@@ -4,7 +4,10 @@ const fs = require('fs');
 const path = require('path');
 
 const envFile = path.join(__dirname, '..', '..', '..', '.env');
-const match = /^HARDCOVER_KEY=(.*)$/m.exec(fs.existsSync(envFile) ? fs.readFileSync(envFile, 'utf8') : '');
+// CI has no workspace .env: it passes HARDCOVER_KEY as an environment variable instead.
+const match =
+  /^HARDCOVER_KEY=(.*)$/m.exec(fs.existsSync(envFile) ? fs.readFileSync(envFile, 'utf8') : '') ||
+  (process.env.HARDCOVER_KEY ? [null, process.env.HARDCOVER_KEY] : null);
 const token = match && match[1].trim().replace(/^["']|["']$/g, '').replace(/^Bearer\s+/i, '');
 if (!token) {
   console.error(`HARDCOVER_KEY missing or empty in ${envFile}`);
