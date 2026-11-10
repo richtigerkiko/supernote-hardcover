@@ -48,8 +48,6 @@ To design it at the Nomad's real size, follow the "Emulator" section of the work
 
 Design findings (emulator, 1404x1872): everything fits on one screen with the action bar fixed at the bottom, so scrolling (slow on e-ink) is only needed for the extreme case; a `showType: 1` view is full-screen on the Nomad (regionType is ignored), and the emulator shows a status bar the Nomad view will not have.
 
-## Not done
+## Open work
 
-Quote saving (needs the verification above), a settings screen (only the file exists), PDFs (EPUB only), OAuth (the root `.env` has a client id, unused), a Hardcover edition switch when the file's edition differs from the reading entry.
-
-Still to check on the Nomad: Pause/Resume, the 401 path, a 429 retry, the detail page (Write review needs typing, untested in a plugin view; status id 4), picking Paused asks first and Cancel leaves the status alone, a 2% step pushes and shows "Last sync". Open question: how long Hardcover merges progress journal entries (at least 71 minutes; probably per day).
+Tracked as GitHub issues, not here.
