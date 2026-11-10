@@ -274,11 +274,8 @@ session.api = {
     const s = await (session.pending ?? safeSample());
     session.pending = null;
     if (!s) return {message: 'Open an EPUB in a document to see its Hardcover page.'};
-<<<<<<< HEAD
-    await needPermissions();
-=======
     if (memMeta.get(s.path)?.failed) memMeta.delete(s.path); // a button press tries a failed read again
->>>>>>> 3a1534f (Show sync state on the page; keep a broken EPUB from being re-read; pass own editions to the detail query)
+    await needPermissions();
     const item = await withTimeout(resolvePath(s.path), 20_000, 'book lookup');
     const meta = await metaFor(s.path);
     if (meta.failed) return {message: "Could not read this EPUB's title and author."};
