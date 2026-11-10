@@ -1,4 +1,4 @@
-import {bookIdsForIsbns, fetchBookDetail, fetchCurrentlyReading, progressInput, saveProgress} from '../src/hardcover';
+import {bookIdsForIsbns, fetchBookDetail, fetchCurrentlyReading, localDate, progressInput, saveProgress} from '../src/hardcover';
 
 const reply = (data, status = 200) => ({ok: status < 400, status, json: async () => ({data})});
 let calls;
@@ -72,7 +72,7 @@ test('saveProgress inserts a new read when there is none', async () => {
   mockFetch(reply({insert_user_book_read: {id: 55, error: null}}));
   await saveProgress('T', {...ITEM, read: null}, 120);
   expect(calls[0].variables.ub).toBe(7);
-  expect(calls[0].variables.read).toMatchObject({progress_pages: 120, edition_id: 32560293});
+  expect(calls[0].variables.read).toMatchObject({progress_pages: 120, edition_id: 32560293, started_at: localDate(new Date())});
 });
 
 test('a second save on the same item updates the read the first one inserted', async () => {
@@ -92,6 +92,10 @@ test('an insert that returns no read id throws and caches nothing', async () => 
   expect(item.read).toBeNull();
 });
 
+test('localDate is the local calendar day, in any time zone', () => {
+  expect(localDate(new Date(2026, 10, 10, 0, 30))).toBe('2026-11-10');
+});
+
 test('never writes without a real page count', async () => {
   mockFetch();
   await expect(saveProgress('T', ITEM, 0)).rejects.toThrow(/no page count/);
@@ -105,7 +109,7 @@ test.each([
   [500, /HTTP 500/],
 ])('HTTP %i is an error, not a silent success', async (status, msg) => {
   mockFetch(reply(null, status));
-  await expect(saveProgress('T', ITEM, 120)).rejects.toThrow(msg);
+  await expect(saveProgress('T', ITEM, 120)).rejects.toMatchObject({status, message: expect.stringMatching(msg)});
 });
 
 test('a GraphQL error or an error field in the result throws', async () => {

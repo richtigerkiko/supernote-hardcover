@@ -28,6 +28,7 @@ test('steps: 2% of the book, the last page is the last step', () => {
   expect(stepOf(86, TOTAL)).toBe(13);
   expect(stepOf(TOTAL - 1, TOTAL)).toBe(50);
   expect(stepOf(5000, TOTAL)).toBe(50); // a page past the end is the end
+  expect(stepOf(28, 50)).toBe(29); // 29/50 is exactly 58%, which float division put just under
 });
 
 test('first sight of a book pushes nothing, however long you stay', async () => {
@@ -117,14 +118,27 @@ test('a failed push keeps the page and is retried after a pause, also from a tou
   expect(pushes).toEqual([edition(86)]);
 });
 
-test('a rate limit (429) waits longer than another error', async () => {
-  const {tracker, pushes, advance} = setup({pushFails: 'Hardcover rate limit (429)'});
+test('a rate limit (429, by status) waits longer than another error', async () => {
+  let t = 1_000_000;
+  let fail = true;
+  const pushes = [];
+  const tracker = createTracker({
+    now: () => t,
+    resolve: async () => BUTCHER,
+    push: async (it, pages) => {
+      if (fail) throw Object.assign(new Error('rate limited'), {status: 429});
+      pushes.push(pages);
+    },
+  });
   await tracker.tick(at(81));
+  await tracker.tick(at(86)); // crossing: push fails
+  fail = false;
+  t += 61_000;
   await tracker.tick(at(86));
-  expect(tracker.state.lastError.message).toMatch(/429/);
-  advance(61_000);
+  expect(pushes).toEqual([]); // still waiting (5 min)
+  t += 240_000;
   await tracker.tick(at(86));
-  expect(pushes).toEqual([]); // still waiting (5 min), and it would fail again anyway
+  expect(pushes).toEqual([edition(86)]);
 });
 
 test('without a page count in the edition nothing is pushed and the problem is reported', async () => {
