@@ -1,4 +1,4 @@
-import {bookIdsForIsbns, fetchBookDetail, fetchCurrentlyReading, progressInput, saveProgress} from '../src/hardcover';
+import {bookIdsForIsbns, fetchBookDetail, fetchCurrentlyReading, localDate, progressInput, saveProgress} from '../src/hardcover';
 
 const reply = (data, status = 200) => ({ok: status < 400, status, json: async () => ({data})});
 let calls;
@@ -90,6 +90,10 @@ test('an insert that returns no read id throws and caches nothing', async () => 
   const item = {...ITEM, read: null};
   await expect(saveProgress('T', item, 120)).rejects.toThrow(/no read id/);
   expect(item.read).toBeNull();
+});
+
+test('localDate is the local calendar day, in any time zone', () => {
+  expect(localDate(new Date(2026, 10, 10, 0, 30))).toBe('2026-11-10');
 });
 
 test('never writes without a real page count', async () => {

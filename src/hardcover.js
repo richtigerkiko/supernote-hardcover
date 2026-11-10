@@ -74,10 +74,13 @@ export function progressInput(item, pages) {
   return input;
 }
 
+// The day as the reader lives it; toISOString gives the UTC day, which is yesterday just after midnight east of UTC.
+export const localDate = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 export async function saveProgress(token, item, pages) {
   if (!(pages > 0)) throw new Error('refusing to save: no page count');
   const input = progressInput(item, pages);
-  const started_at = new Date().toISOString().slice(0, 10);
+  const started_at = localDate(new Date());
   const data = item.read
     ? await gql(token, UPDATE, {id: item.read.id, object: input})
     : await gql(token, INSERT, {ub: item.userBookId, read: {...input, started_at}});
