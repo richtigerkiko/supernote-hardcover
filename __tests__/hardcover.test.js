@@ -1,4 +1,4 @@
-import {bookIdsForIsbns, fetchCurrentlyReading, progressInput, saveProgress} from '../src/hardcover';
+import {bookIdsForIsbns, fetchBookDetail, fetchCurrentlyReading, progressInput, saveProgress} from '../src/hardcover';
 
 const reply = (data, status = 200) => ({ok: status < 400, status, json: async () => ({data})});
 let calls;
@@ -113,4 +113,12 @@ test('a GraphQL error or an error field in the result throws', async () => {
   await expect(saveProgress('T', ITEM, 120)).rejects.toThrow('Hardcover: bad');
   mockFetch(reply({update_user_book_read: {error: 'nope'}}));
   await expect(saveProgress('T', ITEM, 120)).rejects.toThrow('Hardcover: nope');
+});
+
+test('fetchBookDetail adds an edition that only comes back under mine, once', async () => {
+  mockFetch(reply({books_by_pk: {title: 'T', editions: [{id: 1}, {id: 2}], mine: [{id: 2}, {id: 300}]}}));
+  const book = await fetchBookDetail('T', 5, [2, 300]);
+  expect(book.editions.map(e => e.id)).toEqual([1, 2, 300]);
+  expect(book.mine).toBeUndefined();
+  expect(calls[0].variables).toEqual({id: 5, ids: [2, 300]});
 });

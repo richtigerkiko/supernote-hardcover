@@ -4,7 +4,7 @@
     "iconPath":  "",
     "desc":  "",
     "name":  "HardcoverSync",
-    "versionCode":  "25",
+    "versionCode":  "26",
     "uses-permissions":  [
                              "plugin.permission.FILE:READ",
                              "plugin.permission.FILE:WRITE",

@@ -59,3 +59,9 @@ test('withEdition swaps edition id and pages on the item and its read, and ignor
 test('status ids', () => {
   expect(STATUS_ID).toEqual({'Currently reading': 2, Paused: 4, 'Did not finish': 5, Finished: 3});
 });
+
+test('an edition without a page count is never the default: it falls through to one that has pages', () => {
+  const nopages = {...book, editions: [{...book.editions[0], id: 1, pages: null}, book.editions[1]]};
+  const d = buildDetail({book: nopages, item, saved: null, sample: {page: 0, total: 10}, isbns: ['9781952600562']});
+  expect(d.editionId).toBe('2'); // neither the reading entry's edition (1) nor the file's ISBN edition (1) has pages
+});

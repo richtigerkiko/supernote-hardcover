@@ -42,6 +42,7 @@ export const STATUSES = ['Currently reading', 'Paused', 'Did not finish', 'Finis
 type Props = {
   book: BookDetail;
   tracking: boolean;
+  syncNote?: string; // last sync or why tracking is not working, shown above the progress bar
   onToggleTracking: () => void;
   onClose: () => void;
   onWriteReview: () => void;
@@ -154,7 +155,7 @@ function Item({on, onPress, children}: {on: boolean; onPress: () => void; childr
   );
 }
 
-export default function DetailPage({book, tracking, onToggleTracking, onClose, onWriteReview, onSetStatus, onSetEdition}: Props) {
+export default function DetailPage({book, tracking, syncNote, onToggleTracking, onClose, onWriteReview, onSetStatus, onSetEdition}: Props) {
   const [view, setView] = useState<'detail' | 'status' | 'editions'>('detail');
   const [pending, setPending] = useState<string | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -185,7 +186,7 @@ export default function DetailPage({book, tracking, onToggleTracking, onClose, o
 
   if (view === 'editions') {
     const choice = pending ?? book.editionId;
-    const shown = book.editions.filter(e => !e.audio);
+    const shown = book.editions.filter(e => !e.audio && e.pages > 0);
     const hidden = book.editions.length - shown.length;
     const close = () => {
       setView('detail');
@@ -196,7 +197,7 @@ export default function DetailPage({book, tracking, onToggleTracking, onClose, o
         <TopBar title="Choose edition" onBack={close} />
         <ScrollView>
           <Text style={styles.pickNote}>
-            {`Pick the edition this file is. Page counts and progress follow it.${hidden ? ` ${hidden} audiobook edition${hidden > 1 ? 's' : ''} hidden.` : ''}`}
+            {`Pick the edition this file is. Page counts and progress follow it.${hidden ? ` ${hidden} edition${hidden > 1 ? 's' : ''} without a page count hidden.` : ''}`}
           </Text>
           {shown.map(e => (
             <Item key={e.id} on={e.id === choice} onPress={() => setPending(e.id)}>
@@ -245,6 +246,7 @@ export default function DetailPage({book, tracking, onToggleTracking, onClose, o
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        {syncNote ? <Text style={styles.syncNote}>{syncNote}</Text> : null}
         <View style={styles.progress}>
           <Progress page={page} total={ed.pages} />
         </View>
@@ -330,6 +332,7 @@ const styles = StyleSheet.create({
   toggleText: {fontSize: 20, fontWeight: '700', color: BLACK},
   toggleTextOn: {color: WHITE},
   content: {padding: 24, paddingBottom: 16},
+  syncNote: {fontSize: 18, color: BLACK, marginBottom: 8},
   progress: {marginBottom: 20},
   bar: {height: 40, borderWidth: 3, borderColor: BLACK, justifyContent: 'center'},
   barText: {fontSize: 20, fontWeight: '500', color: BLACK, paddingLeft: 12},

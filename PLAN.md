@@ -4,7 +4,7 @@ The first plan (manual sync button, filename matching, a picker) was replaced af
 
 ## Done and verified on the device
 
-- Install, tracking from plugin load with no button press (touch-driven), status dialog, pause/resume.
+- Install, tracking from plugin load with no button press (touch-driven).
 - Book identification from EPUB metadata and ISBN lookup (real files and real account).
 - Progress push on each 2% step crossed, no timers (verified on the Nomad 2026-11-09 22:04: 3 pushes for 22 pages, correct edition pages, same journal entry updated in place).
 
@@ -19,3 +19,4 @@ The first plan (manual sync button, filename matching, a picker) was replaced af
 3. **Exercise on the device**: Pause/Resume, a book not on the reading list, the 401 path, returning to a book after a break, a rate-limit (429) retry.
 4. **Detail page**: wired (button opens it, real book data, status and edition choices, tracking toggle), built as versionCode 20 but NOT yet tried on the Nomad. Still to do: Write review (needs typing: the Nomad keyboard is expected to work, untested in a plugin view), a settings screen for the quote privacy, check status id 4 (Paused) with a controlled write, whether `update_user_book(status_id)` and `edition_id` on the read behave as expected.
 5. **PDFs and the Hardcover edition switch** (file edition vs the reading entry's edition): not started.
+6. **Device checks for the review fixes** (PR "should fix"): a 2% step pushes and the page shows "Last sync"; picking Paused asks first and Cancel leaves the status alone; no "Save quote" button on a text selection.

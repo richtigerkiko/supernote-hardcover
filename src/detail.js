@@ -26,12 +26,12 @@ export function buildDetail({book, item, saved, sample, isbns = []}) {
     audio: !!e.audio_seconds && !e.pages,
   }));
   const wanted = String(saved?.id ?? '');
-  const byFile = editions.find(e => e.isbn && isbns.includes(e.isbn));
+  const byFile = editions.find(e => e.isbn && e.pages > 0 && isbns.includes(e.isbn));
   const theirs = String(item.editionId ?? '');
   const ed =
     editions.find(e => e.id === wanted) ??
     byFile ??
-    editions.find(e => e.id === theirs) ??
+    editions.find(e => e.id === theirs && e.pages > 0) ??
     editions.find(e => !e.audio && e.pages) ??
     editions[0];
   return {
