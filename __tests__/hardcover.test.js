@@ -1,0 +1,99 @@
+import {bookIdsForIsbns, fetchCurrentlyReading, progressInput, saveProgress} from '../src/hardcover';
+
+const reply = (data, status = 200) => ({ok: status < 400, status, json: async () => ({data})});
+let calls;
+const mockFetch = (...replies) => {
+  calls = [];
+  global.fetch = jest.fn(async (url, init) => {
+    calls.push(JSON.parse(init.body));
+    return replies.shift();
+  });
+};
+
+const ITEM = {
+  userBookId: 7,
+  editionId: 32560293,
+  editionPages: 330,
+  read: {id: 99, started_at: '2026-11-01', finished_at: null, progress_pages: 100, edition_id: 32560293},
+};
+
+test('fetchCurrentlyReading flattens the response', async () => {
+  mockFetch(
+    reply({
+      me: [
+        {
+          user_books: [
+            {
+              id: 7,
+              book_id: 2312000,
+              edition_id: 32560293,
+              book: {title: 'The Butcher of Nazareth', contributions: [{author: {name: 'David Scott Hay'}}]},
+              edition: {id: 32560293, pages: 330},
+              user_book_reads: [{id: 99, started_at: null, finished_at: null, progress_pages: 100, edition_id: 32560293}],
+            },
+          ],
+        },
+      ],
+    }),
+  );
+  expect(await fetchCurrentlyReading('T')).toEqual([
+    {
+      userBookId: 7,
+      bookId: 2312000,
+      title: 'The Butcher of Nazareth',
+      authors: ['David Scott Hay'],
+      editionId: 32560293,
+      editionPages: 330,
+      read: {id: 99, started_at: null, finished_at: null, progress_pages: 100, edition_id: 32560293},
+    },
+  ]);
+  expect(global.fetch.mock.calls[0][1].headers.authorization).toBe('Bearer T');
+});
+
+test('bookIdsForIsbns returns each book once, even when several editions match', async () => {
+  mockFetch(reply({editions: [{book_id: 2312000}, {book_id: 2312000}, {book_id: 383598}]}));
+  expect(await bookIdsForIsbns('T', ['9781668287323', '9781668287309'])).toEqual([2312000, 383598]);
+  expect(calls[0].variables).toEqual({isbns: ['9781668287323', '9781668287309']});
+});
+
+test('progressInput keeps the existing started_at and edition, and leaves null fields out', () => {
+  expect(progressInput(ITEM, 120)).toEqual({progress_pages: 120, edition_id: 32560293, started_at: '2026-11-01'});
+  const noDates = {...ITEM, read: {...ITEM.read, started_at: null}};
+  expect(progressInput(noDates, 120)).toEqual({progress_pages: 120, edition_id: 32560293});
+});
+
+test('saveProgress updates the active read when there is one', async () => {
+  mockFetch(reply({update_user_book_read: {error: null}}));
+  await saveProgress('T', ITEM, 120);
+  expect(calls[0].variables).toEqual({id: 99, object: {progress_pages: 120, edition_id: 32560293, started_at: '2026-11-01'}});
+});
+
+test('saveProgress inserts a new read when there is none', async () => {
+  mockFetch(reply({insert_user_book_read: {error: null}}));
+  await saveProgress('T', {...ITEM, read: null}, 120);
+  expect(calls[0].variables.ub).toBe(7);
+  expect(calls[0].variables.read).toMatchObject({progress_pages: 120, edition_id: 32560293});
+});
+
+test('never writes without a real page count', async () => {
+  mockFetch();
+  await expect(saveProgress('T', ITEM, 0)).rejects.toThrow(/no page count/);
+  await expect(saveProgress('T', ITEM, null)).rejects.toThrow(/no page count/);
+  expect(global.fetch).not.toHaveBeenCalled();
+});
+
+test.each([
+  [401, /401/],
+  [429, /429/],
+  [500, /HTTP 500/],
+])('HTTP %i is an error, not a silent success', async (status, msg) => {
+  mockFetch(reply(null, status));
+  await expect(saveProgress('T', ITEM, 120)).rejects.toThrow(msg);
+});
+
+test('a GraphQL error or an error field in the result throws', async () => {
+  mockFetch({ok: true, status: 200, json: async () => ({errors: [{message: 'bad'}]})});
+  await expect(saveProgress('T', ITEM, 120)).rejects.toThrow('Hardcover: bad');
+  mockFetch(reply({update_user_book_read: {error: 'nope'}}));
+  await expect(saveProgress('T', ITEM, 120)).rejects.toThrow('Hardcover: nope');
+});

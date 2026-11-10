@@ -1,0 +1,16 @@
+import {isbnsIn, matchBook} from './match';
+
+// Which Currently Reading book is this EPUB? Decided only by its own metadata, never its filename.
+//   meta: parseEpub() result {title, creator, ids, pageBreakSource}
+//   reading: fetchCurrentlyReading() result; bookIdsForIsbns(isbns): async () => [book ids]
+// An ISBN that Hardcover knows decides it (that book is either being read or it is not). Otherwise
+// title + author are matched. Both are needed: real files have ISBN typos (an invalid checksum) and
+// editions Hardcover lacks. Returns the reading item, or null.
+export async function resolveBook({meta, reading, bookIdsForIsbns}) {
+  const isbns = isbnsIn([...meta.ids, meta.pageBreakSource ?? ''].join(' '));
+  if (isbns.length) {
+    const ids = await bookIdsForIsbns(isbns);
+    if (ids.length) return reading.find(r => ids.includes(r.bookId)) ?? null;
+  }
+  return meta.title ? matchBook(`${meta.title} ${meta.creator ?? ''}`, reading) : null;
+}
