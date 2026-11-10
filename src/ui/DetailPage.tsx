@@ -354,8 +354,6 @@ const styles = StyleSheet.create({
   chip: {borderWidth: 1.5, borderColor: BLACK, borderRadius: 14, paddingHorizontal: 9, marginRight: CHIP_GAP, height: 26, justifyContent: 'center'},
   chipText: {fontSize: 18, color: BLACK, includeFontPadding: false},
   measure: {position: 'absolute', left: 0, top: 0, opacity: 0, flexDirection: 'row'},
-  statusBtn: {alignSelf: 'flex-start', height: 48, marginTop: 6, paddingHorizontal: 16, borderWidth: 2, borderColor: BLACK, borderRadius: 24, justifyContent: 'center'},
-  statusText: {fontSize: 19, fontWeight: '700', color: BLACK},
   edRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, paddingVertical: 10, paddingHorizontal: 16, borderWidth: 2, borderColor: BLACK},
   edText: {flex: 1},
   l0: {fontSize: 17, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', color: BLACK},
