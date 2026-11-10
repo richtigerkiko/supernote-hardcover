@@ -47,7 +47,7 @@ export function createTracker({resolve, push, now = Date.now}) {
     const pages = toPages(page, total, b.item.editionPages);
     if (pages === null) {
       b.pending = null;
-      state.lastError = new Error(`no page count for ${b.item.title}`);
+      state.lastError = Object.assign(new Error(`no page count for ${b.item.title}`), {title: b.item.title});
       return;
     }
     b.pending = {pages, step};
@@ -66,6 +66,7 @@ export function createTracker({resolve, push, now = Date.now}) {
       } catch (e) {
         b.retryAt = now() + (/429/.test(e.message) ? RATE_LIMIT_RETRY_MS : RETRY_MS);
         state.lastError = e;
+        e.title = b.item.title; // lets the page show the error only for this book
       }
     }
   }

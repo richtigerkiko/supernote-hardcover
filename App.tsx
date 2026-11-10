@@ -31,6 +31,7 @@ function Message({text, onClose}: {text: string; onClose: () => void}) {
 export default function App(): React.JSX.Element {
   const [preview, setPreview] = useState<boolean | null>(null);
   const [tracking, setTracking] = useState(false); // per document, off until switched on for the open book
+  const [syncNote, setSyncNote] = useState('');
   const [long, setLong] = useState(false);
   const [book, setBook] = useState<BookDetail | null>(null);
   const [message, setMessage] = useState('Loading…');
@@ -48,6 +49,7 @@ export default function App(): React.JSX.Element {
       setBook(null);
       setMessage('Loading…');
       setTracking(false);
+      setSyncNote('');
       session.api
         ?.load()
         .then((r: any) => {
@@ -55,6 +57,7 @@ export default function App(): React.JSX.Element {
           if (r.book) {
             setBook(r.book);
             setTracking(r.tracking);
+            setSyncNote(r.sync);
           } else setMessage(r.message);
         })
         .catch((e: any) => mine === latest && setMessage(`Could not load the book: ${String(e?.message ?? e)}`));
@@ -90,6 +93,7 @@ export default function App(): React.JSX.Element {
     <DetailPage
       book={book}
       tracking={tracking}
+      syncNote={syncNote}
       onToggleTracking={toggle}
       onClose={close}
       onWriteReview={() => session.api?.writeReview()}

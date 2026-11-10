@@ -114,3 +114,8 @@ test('an edition with no page count is not listed', () => {
   expect(t).not.toContain('NoPages Press');
   expect(t).toContain('2 editions without a page count hidden.');
 });
+
+test('the sync note is shown above the progress when given, and absent otherwise', () => {
+  expect(all(render({syncNote: 'Last sync: page 120'}))).toContain('Last sync: page 120');
+  expect(all(render({}))).not.toContain('Last sync');
+});

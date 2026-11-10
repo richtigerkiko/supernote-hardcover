@@ -25,7 +25,7 @@ PluginManager.init();
 // Device facts this relies on (measured on the Nomad, see CLAUDE.md):
 //  - Touch events (registerMotionListener) and SDK calls work in EVERY lifecycle state, including before any button
 //    press (state 1) and after a view closed (state 3). setTimeout/setInterval only run in state 2.
-//  - So tracking is driven by finger-up events, not a timer: it needs no button press and survives a view closing.
+//  - So tracking is driven by finger-down events, not a timer: it needs no button press and survives a view closing.
 //    Everything that must happen later is decided from timestamps at the next touch (see src/tracker.js).
 //  - SDK calls can hang (not reject) when no document is in front, so a hung sample is detected by wall clock.
 // Set true to log every touch event with the page seen at that moment (and keep tracking OFF so test page flipping
@@ -106,7 +106,14 @@ async function metaFor(path) {
   meta = cache ? await cache.get(path).catch(() => null) : null;
   if (meta) log('metadata from the saved cache');
   else {
-    meta = await readMeta(path);
+    try {
+      meta = await readMeta(path);
+    } catch (e) {
+      log('cannot read the EPUB, not trying again on touches', String(e));
+      meta = {ids: [], failed: true}; // in memory only, so a restart (or a button press, see load) tries again
+      memMeta.set(path, meta);
+      return meta;
+    }
     if (cache) cache.set(path, meta).catch(() => {});
   }
   memMeta.set(path, meta);
@@ -252,6 +259,14 @@ function stopIfTokenRejected() {
 
 // ---- the detail page: App.tsx calls these through src/session.js (same JS runtime) ----
 let current = null; // {path, item, detail} of the book the page was opened on
+// One line for the page: why tracking is not working, or the last push. lastPush and lastError are shared by all books,
+// so they show only for the book that is open (an error with no title, such as a failed lookup, shows for any).
+const syncNote = title => {
+  if (!tokenOk) return 'Token rejected, tracking stopped';
+  const {lastError: e, lastPush: p} = tracker.state;
+  if (e && (!e.title || e.title === title)) return e.message;
+  return p?.title === title ? `Last sync: page ${p.pages}` : '';
+};
 const dialogOk = tip => dialog(tip, 'OK', 'Close', false).catch(() => {});
 session.api = {
   // -> {book} for DetailPage, or {message} when there is nothing to show
@@ -259,14 +274,20 @@ session.api = {
     const s = await (session.pending ?? safeSample());
     session.pending = null;
     if (!s) return {message: 'Open an EPUB in a document to see its Hardcover page.'};
+<<<<<<< HEAD
     await needPermissions();
+=======
+    if (memMeta.get(s.path)?.failed) memMeta.delete(s.path); // a button press tries a failed read again
+>>>>>>> 3a1534f (Show sync state on the page; keep a broken EPUB from being re-read; pass own editions to the detail query)
     const item = await withTimeout(resolvePath(s.path), 20_000, 'book lookup');
-    if (!item) return {message: 'This book is not on your Hardcover Currently Reading list.'};
-    const book = await withTimeout(fetchBookDetail(TOKEN, item.bookId), 20_000, 'book details');
     const meta = await metaFor(s.path);
+    if (meta.failed) return {message: "Could not read this EPUB's title and author."};
+    if (!item) return {message: 'This book is not on your Hardcover Currently Reading list.'};
+    const editionIds = [item.editionId, meta.edition?.id].filter(Boolean);
+    const book = await withTimeout(fetchBookDetail(TOKEN, item.bookId, editionIds), 20_000, 'book details');
     const detail = buildDetail({book, item, saved: meta.edition, sample: s, isbns: isbnsIn((meta.ids ?? []).join(' '))});
     current = {path: s.path, item, detail};
-    return {book: detail, tracking: meta.tracking === true};
+    return {book: detail, tracking: meta.tracking === true, sync: syncNote(item.title)};
   },
   // Tracking is remembered per file like the edition. Turning it on starts from the page the book is at now (nothing is
   // sent for it); turning it off drops anything not yet sent.

@@ -238,3 +238,10 @@ describe('re-check of matched books', () => {
     expect(pushes).toEqual([edition(86)]);
   });
 });
+
+test('errors name the book they belong to', async () => {
+  const {tracker} = setup({pushFails: 'Hardcover HTTP 500'});
+  await tracker.tick(at(81));
+  await tracker.tick(at(86));
+  expect(tracker.state.lastError.title).toBe(BUTCHER.title);
+});
