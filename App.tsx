@@ -136,6 +136,12 @@ export default function App(): React.JSX.Element {
         setBook({...book, editionId, editionSaved: true});
         session.api?.setEdition(editionId);
       }}
+      onAddToLibrary={() =>
+        Promise.resolve(session.api?.addToLibrary()).then(
+          () => session.opened(), // reload: the book is now on the shelves
+          (e: any) => setSyncNote(`Could not add the book: ${String(e?.message ?? e)}`),
+        )
+      }
     />
   );
 }

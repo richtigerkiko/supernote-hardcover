@@ -1,5 +1,5 @@
 import type {EpubMeta} from './epub';
-import type {ReadingItem} from './hardcover';
+import type {CatalogueBook, ReadingItem} from './hardcover';
 import {isbnsIn, matchBook} from './match';
 
 // Which book on the reader's shelves is this EPUB? Decided only by its own metadata, never its filename.
@@ -23,4 +23,27 @@ export async function resolveBook({
     if (ids.length) return reading.find(r => ids.includes(r.bookId)) ?? null;
   }
   return meta.title ? matchBook(`${meta.title} ${meta.creator ?? ''}`, reading) : null;
+}
+
+// The same file looked up in Hardcover's whole catalogue (for a book that is not in the library).
+// editionsForIsbns(isbns): async () => [{id, bookId}]; searchBooks(text): async () => [{bookId, title, authors}].
+// Returns {bookId, editionId?} (an ISBN match also names the edition to mark as owned) or null.
+export async function catalogueBook({
+  meta,
+  editionsForIsbns,
+  searchBooks,
+}: {
+  meta: EpubMeta;
+  editionsForIsbns: (isbns: string[]) => Promise<{id: number; bookId: number}[]>;
+  searchBooks: (text: string) => Promise<CatalogueBook[]>;
+}): Promise<{bookId: number; editionId?: number} | null> {
+  const isbns = isbnsIn([...meta.ids, meta.pageBreakSource ?? ''].join(' '));
+  if (isbns.length) {
+    const [e] = await editionsForIsbns(isbns);
+    if (e) return {bookId: e.bookId, editionId: e.id};
+  }
+  if (!meta.title) return null;
+  const text = `${meta.title} ${meta.creator ?? ''}`;
+  const hit = matchBook(text, await searchBooks(text));
+  return hit ? {bookId: hit.bookId} : null;
 }

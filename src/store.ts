@@ -19,6 +19,7 @@ export interface FileMeta extends EpubMeta {
   failed?: boolean; // memory only: the EPUB could not be read
   edition?: {id: number; pages: number}; // the edition the reader picked for this file
   tracking?: boolean; // tracking is switched on for this file
+  linked?: {bookId: number; editionId?: number}; // the reader said No to adding it: the catalogue book this file is
 }
 
 // A JSON file behind the native adapter {readTextFile, writeFile, stat}, with an in-memory copy. It never throws:
