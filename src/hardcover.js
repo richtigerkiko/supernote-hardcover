@@ -9,7 +9,7 @@ const QUERY_READING = `query { me { user_books(where: {status_id: {_eq: ${CURREN
 } } }`;
 
 const UPDATE = `mutation($id: Int!, $object: DatesReadInput!) { update_user_book_read(id: $id, object: $object) { error } }`;
-const INSERT = `mutation($ub: Int!, $read: DatesReadInput!) { insert_user_book_read(user_book_id: $ub, user_book_read: $read) { id error } }`;
+const INSERT = `mutation($ub: Int!, $read: DatesReadInput!) { insert_user_book_read(user_book_id: $ub, user_book_read: $read) { id error user_book_read { id } } }`;
 
 async function gql(token, query, variables) {
   const res = await fetch(URL, {
@@ -84,7 +84,11 @@ export async function saveProgress(token, item, pages) {
   const res = data.update_user_book_read || data.insert_user_book_read;
   if (res.error) throw new Error(`Hardcover: ${res.error}`);
   // The tracker pushes this same item next time: remember the new read so that push is an update, not a second insert.
-  if (!item.read) item.read = {id: res.id, started_at, edition_id: input.edition_id};
+  if (!item.read) {
+    const id = res.user_book_read?.id ?? res.id;
+    if (typeof id !== 'number') throw new Error('Hardcover: insert returned no read id');
+    item.read = {id, started_at, edition_id: input.edition_id};
+  }
 }
 
 // Everything the detail page shows about a book, and all its editions (the page hides audiobooks).

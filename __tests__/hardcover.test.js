@@ -85,6 +85,13 @@ test('a second save on the same item updates the read the first one inserted', a
   expect(calls[1].variables.id).toBe(55);
 });
 
+test('an insert that returns no read id throws and caches nothing', async () => {
+  mockFetch(reply({insert_user_book_read: {id: null, error: null}}));
+  const item = {...ITEM, read: null};
+  await expect(saveProgress('T', item, 120)).rejects.toThrow(/no read id/);
+  expect(item.read).toBeNull();
+});
+
 test('never writes without a real page count', async () => {
   mockFetch();
   await expect(saveProgress('T', ITEM, 0)).rejects.toThrow(/no page count/);
