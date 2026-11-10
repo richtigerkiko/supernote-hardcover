@@ -155,7 +155,9 @@ const tracker = createTracker({
   push: async (item, pages) => {
     await needPermissions();
     log('push', item.title, pages);
-    return saveProgress(TOKEN, item, pages);
+    const hadRead = !!item.read;
+    await saveProgress(TOKEN, item, pages);
+    if (!hadRead) reading.at = 0; // the cached list still says read: null; fetch it again so a forget cannot insert twice
   },
 });
 
