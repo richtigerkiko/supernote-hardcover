@@ -1,6 +1,8 @@
 import {bookIdsForIsbns, fetchBookDetail, fetchUserBooks, localDate, progressInput, saveProgress} from '../src/hardcover';
 
-const reply = (data, status = 200) => ({ok: status < 400, status, json: async () => ({data})});
+// What the SDK transport reads from a Response: status, headers.forEach, text().
+const raw = (body, status = 200) => ({status, headers: {forEach() {}}, text: async () => JSON.stringify(body)});
+const reply = (data, status = 200) => raw(status < 400 ? {data} : {}, status);
 let calls;
 const mockFetch = (...replies) => {
   calls = [];
@@ -105,20 +107,16 @@ test('never writes without a real page count', async () => {
   expect(global.fetch).not.toHaveBeenCalled();
 });
 
-test.each([
-  [401, /401/],
-  [429, /429/],
-  [500, /HTTP 500/],
-])('HTTP %i is an error, not a silent success', async (status, msg) => {
+test.each([401, 429, 500])('HTTP %i is an error that carries its status, not a silent success', async status => {
   mockFetch(reply(null, status));
-  await expect(saveProgress('T', ITEM, 120)).rejects.toMatchObject({status, message: expect.stringMatching(msg)});
+  await expect(saveProgress('T', ITEM, 120)).rejects.toMatchObject({status});
 });
 
 test('a GraphQL error or an error field in the result throws', async () => {
-  mockFetch({ok: true, status: 200, json: async () => ({errors: [{message: 'bad'}]})});
-  await expect(saveProgress('T', ITEM, 120)).rejects.toThrow('Hardcover: bad');
+  mockFetch(raw({errors: [{message: 'bad'}]}));
+  await expect(saveProgress('T', ITEM, 120)).rejects.toThrow('bad');
   mockFetch(reply({update_user_book_read: {error: 'nope'}}));
-  await expect(saveProgress('T', ITEM, 120)).rejects.toThrow('Hardcover: nope');
+  await expect(saveProgress('T', ITEM, 120)).rejects.toThrow('nope');
 });
 
 test('fetchBookDetail adds an edition that only comes back under mine, once', async () => {

@@ -1,4 +1,4 @@
-const URL = 'https://api.hardcover.app/v1/graphql';
+import {HardcoverClient} from '@hardcover/sdk';
 
 const QUERY_READING = `query { me { user_books {
   id book_id edition_id status_id
@@ -10,19 +10,15 @@ const QUERY_READING = `query { me { user_books {
 const UPDATE = `mutation($id: Int!, $object: DatesReadInput!) { update_user_book_read(id: $id, object: $object) { error } }`;
 const INSERT = `mutation($ub: Int!, $read: DatesReadInput!) { insert_user_book_read(user_book_id: $ub, user_book_read: $read) { id error user_book_read { id } } }`;
 
-async function gql(token, query, variables) {
-  const res = await fetch(URL, {
-    method: 'POST',
-    headers: {'content-type': 'application/json', authorization: `Bearer ${token}`},
-    body: JSON.stringify({query, variables}),
-  });
-  const fail = msg => Object.assign(new Error(msg), {status: res.status}); // callers branch on status, not on the text
-  if (res.status === 401) throw fail('Hardcover token rejected (401): reset or expired');
-  if (res.status === 429) throw fail('Hardcover rate limit (429)');
-  if (!res.ok) throw fail(`Hardcover HTTP ${res.status}`);
-  const json = await res.json();
-  if (json.errors) throw new Error(`Hardcover: ${json.errors[0].message}`);
-  return json.data;
+// One client per token. The SDK paces requests and throws typed errors that carry `status` (callers branch on it). maxRetries 0: the tracker owns retries (RETRY_MS, RATE_LIMIT_RETRY_MS).
+let client;
+let clientToken;
+function gql(token, query, variables) {
+  if (!client || clientToken !== token) {
+    client = new HardcoverClient({token, maxRetries: 0, onWarning: () => {}});
+    clientToken = token;
+  }
+  return client.graphql(query, variables);
 }
 
 // Every book on the reader's shelves (any status), flattened to what matching and saving need.

@@ -19,7 +19,7 @@ describe('saveJournal', () => {
   const ENTRY = {bookId: 2312000, editionId: 32560293, event: 'quote', entry: 'a line', position: POSITION};
   const mock = out => {
     const sent = [];
-    global.fetch = jest.fn(async (u, init) => (sent.push(JSON.parse(init.body)), {ok: true, status: 200, json: async () => ({data: {insert_reading_journal: out}})}));
+    global.fetch = jest.fn(async (u, init) => (sent.push(JSON.parse(init.body)), {status: 200, headers: {forEach() {}}, text: async () => JSON.stringify({data: {insert_reading_journal: out}})}));
     return sent;
   };
 
