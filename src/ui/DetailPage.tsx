@@ -137,7 +137,7 @@ function Progress({page, total}: {page: number; total: number}) {
 
 export default function DetailPage({book, tracking, syncNote, onToggleTracking, onClose, onWriteReview, onSetStatus, onSetEdition, onAddToLibrary}: Props) {
   const inLibrary = book.inLibrary !== false;
-  const [view, setView] = useState<'detail' | 'status' | 'editions'>('detail');
+  const [view, setView] = useState<'detail' | 'status' | 'editions' | 'cover'>('detail');
   const [aboutOpen, setAboutOpen] = useState(false);
   const [aboutLong, setAboutLong] = useState(false);
 
@@ -160,6 +160,21 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
             </Item>
           ))}
         </ScrollView>
+      </View>
+    );
+  }
+
+  if (view === 'cover' && book.cover) {
+    return (
+      <View style={styles.page}>
+        <View style={styles.topBar}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close cover" style={styles.close} onPress={() => setView('detail')}>
+            <Text style={styles.closeText}>✕</Text>
+          </Pressable>
+        </View>
+        <Pressable accessibilityLabel="Cover full size" style={styles.coverFull} onPress={() => setView('detail')}>
+          <Image source={{uri: book.cover}} style={styles.coverFullImg} resizeMode="contain" />
+        </Pressable>
       </View>
     );
   }
@@ -198,7 +213,9 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
 
         <View style={styles.header}>
           {book.cover ? (
-            <Image source={{uri: book.cover}} style={styles.cover} resizeMode="contain" />
+            <Pressable accessibilityRole="button" accessibilityLabel="Show cover full size" onPress={() => setView('cover')}>
+              <Image source={{uri: book.cover}} style={styles.cover} resizeMode="contain" />
+            </Pressable>
           ) : (
             <View style={[styles.cover, styles.noCover]}>
               <Text style={styles.noCoverText}>{book.title}</Text>
@@ -291,6 +308,8 @@ const styles = StyleSheet.create({
   fill: {position: 'absolute', top: 0, bottom: 0, left: 0, overflow: 'hidden', backgroundColor: BLACK, justifyContent: 'center'},
   header: {flexDirection: 'row'},
   cover: {width: 190, height: 285, marginRight: 22, borderWidth: 2, borderColor: BLACK},
+  coverFull: {flex: 1, padding: 16},
+  coverFullImg: {width: '100%', height: '100%'},
   noCover: {alignItems: 'center', justifyContent: 'center', padding: 12},
   noCoverText: {fontSize: 22, textAlign: 'center', color: BLACK},
   info: {flex: 1},

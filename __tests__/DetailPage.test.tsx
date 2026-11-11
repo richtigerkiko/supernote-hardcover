@@ -119,3 +119,20 @@ test('the sync note is shown above the progress when given, and absent otherwise
   expect(all(render({syncNote: 'Last sync: page 120'}))).toContain('Last sync: page 120');
   expect(all(render({}))).not.toContain('Last sync');
 });
+
+test('tapping the cover opens it full size; closing returns to the page', () => {
+  const tree = render({book: {...MOCK_BOOK, cover: 'https://x/c.jpg'}});
+  press(tree, 'Show cover full size');
+  expect(tree.root.findAllByProps({accessibilityLabel: 'Cover full size'}).length).toBeGreaterThan(0);
+  expect(all(tree)).not.toContain('Write review');
+  press(tree, 'Close cover');
+  expect(all(tree)).toContain('Write review');
+  press(tree, 'Show cover full size');
+  act(() => tree.root.findAllByProps({accessibilityLabel: 'Cover full size'})[0].props.onPress());
+  expect(all(tree)).toContain('Write review');
+});
+
+test('without a cover there is no cover button', () => {
+  const tree = render({book: {...MOCK_BOOK, cover: undefined}});
+  expect(tree.root.findAllByProps({accessibilityLabel: 'Show cover full size'}).length).toBe(0);
+});
