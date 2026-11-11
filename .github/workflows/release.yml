@@ -4,6 +4,7 @@ on:
     branches: [master]
 permissions:
   contents: write
+concurrency: { group: release, cancel-in-progress: false }
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -19,7 +20,8 @@ jobs:
       - name: Next version
         id: ver
         run: |
-          read -r v code < <(node scripts/next-version.js) || true
+          out=$(node scripts/next-version.js)
+          read -r v code <<< "$out" || true
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "code=$code" >> "$GITHUB_OUTPUT"
           # CI working tree only, nothing is committed back (master is protected)
