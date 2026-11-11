@@ -7,6 +7,7 @@
 import type {BookDetail as PageBook} from './ui/DetailPage';
 import type {Entry} from './ui/JournalPage';
 import type {Review} from './ui/ReviewPage';
+import type {PublicReview} from './hardcover';
 
 /** One reader sample: the open file, its 0-based page and the total pages. */
 export interface Sample {
@@ -31,6 +32,7 @@ export interface SessionApi {
   /** The review to start from (what the entry holds). false: the stored sign-in lacked write:reviews and was dropped, so reload to sign in again. Rejects with a message when the book is not in the library. */
   writeReview(): Promise<Review | false>;
   saveReview(review: Review): Promise<void>;
+  loadReviews(offset: number): Promise<{reviews: PublicReview[]; hasMore: boolean}>;
 }
 
 interface Session {

@@ -3,7 +3,7 @@ import {bookIdsForIsbns, fetchBookDetail, fetchUserBooks, localDate, progressInp
 
 // The SDK is the transport; these tests check what we send it and how we map what it returns.
 type Mocks = Record<string, jest.Mock>;
-const mockSdk: {library: Mocks; books: Mocks; journal: Mocks; request: jest.Mock; options: unknown} = {
+const mockSdk: {library: Mocks; books: Mocks; journal: Mocks; request: jest.Mock; graphql?: jest.Mock; options: unknown} = {
   library: {},
   books: {},
   journal: {},
@@ -250,3 +250,17 @@ test("an OAuth session is passed to the SDK as auth, not as a token", async () =
   expect(mockSdk.options).not.toHaveProperty("token");
 });
 
+
+describe('fetchReviews', () => {
+  const { fetchReviews } = require('../src/hardcover');
+  const row = (id: number) => ({id, rating: 4.5, review_raw: ' Great ', review_has_spoilers: false, reviewed_at: '2026-10-02T10:00:00', user: {name: 'Ann', flair: 'Supporter'}});
+
+  test('maps rows, asks for one extra to know hasMore and sends the offset', async () => {
+    mockSdk.graphql = jest.fn().mockResolvedValue({user_books: Array.from({length: 11}, (_, i) => row(i + 1))});
+    const r = await fetchReviews('t', 5, 20);
+    expect(mockSdk.graphql.mock.calls[0][1]).toEqual({bookId: 5, limit: 11, offset: 20});
+    expect(r.reviews).toHaveLength(10);
+    expect(r.hasMore).toBe(true);
+    expect(r.reviews[0]).toEqual({id: 1, user: 'Ann', supporter: true, rating: 4.5, text: 'Great', spoiler: false, date: '2026-10-02'});
+  });
+});

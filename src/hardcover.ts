@@ -234,3 +234,50 @@ export async function addOwned(auth: Auth, bookId: number, editionId?: number): 
   await c.library.add(bookId, {imported: true, editionId: edition.id});
   return {id: edition.id, pages: edition.pages ?? null};
 }
+
+// ---- other readers' reviews ----
+export interface PublicReview {
+  id: number;
+  user: string;
+  supporter: boolean;
+  rating: number | null; // 0.5 steps
+  text: string;
+  spoiler: boolean;
+  date: string; // YYYY-MM-DD
+}
+
+export const REVIEWS_PAGE = 10;
+
+// Public reviews only (privacy_setting_id 1), newest first. One extra row is asked for to know whether there is more.
+// shortcut: the field names (user.name, user.flair as the Supporter badge) come from the SDK's generated schema and are
+// not yet run against the live API; verify with a read-only query before release.
+const REVIEWS_QUERY = `query Reviews($bookId: Int!, $limit: Int!, $offset: Int!) {
+  user_books(where: {book_id: {_eq: $bookId}, has_review: {_eq: true}, privacy_setting_id: {_eq: 1}}, order_by: {reviewed_at: desc_nulls_last}, limit: $limit, offset: $offset) {
+    id rating review_raw review_has_spoilers reviewed_at
+    user { name flair }
+  }
+}`;
+
+type ReviewRow = {
+  id: number;
+  rating: number | null;
+  review_raw: string | null;
+  review_has_spoilers: boolean | null;
+  reviewed_at: string | null;
+  user: {name: string | null; flair: string | null} | null;
+};
+
+export async function fetchReviews(auth: Auth, bookId: number, offset = 0): Promise<{reviews: PublicReview[]; hasMore: boolean}> {
+  const data = await sdk(auth).graphql<{user_books: ReviewRow[]}>(REVIEWS_QUERY, {bookId, limit: REVIEWS_PAGE + 1, offset});
+  const rows = data.user_books ?? [];
+  const reviews = rows.slice(0, REVIEWS_PAGE).map(r => ({
+    id: r.id,
+    user: r.user?.name || 'Reader',
+    supporter: /supporter/i.test(r.user?.flair ?? ''),
+    rating: r.rating || null,
+    text: (r.review_raw ?? '').trim(),
+    spoiler: !!r.review_has_spoilers,
+    date: (r.reviewed_at ?? '').slice(0, 10),
+  }));
+  return {reviews, hasMore: rows.length > REVIEWS_PAGE};
+}

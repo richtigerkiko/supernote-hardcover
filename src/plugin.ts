@@ -23,6 +23,7 @@ import {
   bookIdsForIsbns,
   editionsForIsbns,
   fetchBookDetail,
+  fetchReviews,
   fetchUserBooks,
   saveJournal,
   saveReview,
@@ -469,6 +470,12 @@ const api: SessionApi = {
     await needPermissions();
     await saveReview(oauth, c.item.userBookId, r);
     log('review saved for', c.item.title);
+  },
+  async loadReviews(offset) {
+    const c = current;
+    if (!c) throw new Error('no book loaded');
+    await needPermissions();
+    return fetchReviews(oauth, c.item.bookId, offset);
   },
 };
 
