@@ -1,5 +1,5 @@
 // Prints "A.B.C CODE" for the next release, derived from conventional commits since the latest vA.B.C-CODE tag.
-// Prints nothing when no commit is releasing (only feat, fix or breaking changes release).
+// Prints nothing when no commit is releasing (only feat, fix, perf or breaking changes release).
 const { execFileSync } = require('child_process');
 
 const RANK = { patch: 1, minor: 2, major: 3 };
@@ -10,7 +10,7 @@ function bumpOf(message) {
   if (m && m[3]) return 'major';
   if (/^BREAKING[ -]CHANGE:/m.test(message)) return 'major';
   if (m && m[1] === 'feat') return 'minor';
-  if (m && m[1] === 'fix') return 'patch';
+  if (m && (m[1] === 'fix' || m[1] === 'perf')) return 'patch';
   return null;
 }
 
