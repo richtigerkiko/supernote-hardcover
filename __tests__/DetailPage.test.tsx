@@ -143,3 +143,62 @@ test('without a cover there is no cover button', () => {
   const tree = render({book: {...MOCK_BOOK, cover: undefined}});
   expect(tree.root.findAllByProps({accessibilityLabel: 'Show cover full size'}).length).toBe(0);
 });
+
+describe('reviews tab', () => {
+  const rev = (id: number, over: any = {}) => ({id, user: `User${id}`, supporter: false, rating: 4.5, text: 'Nice.', spoiler: false, date: '2026-10-02', ...over});
+  const flush = () => act(async () => {});
+
+  test('nothing is requested until the Reviews tab is opened; then once, with the entries shown', async () => {
+    const onLoadReviews = jest.fn().mockResolvedValue({reviews: [rev(1, {supporter: true}), rev(2, {spoiler: true, text: 'SECRET'})], hasMore: false});
+    const tree = render({onLoadReviews});
+    expect(onLoadReviews).not.toHaveBeenCalled();
+    expect(all(tree)).toContain('About'); // default tab
+    press(tree, 'Reviews tab');
+    expect(all(tree)).toContain('Loading reviews…');
+    await flush();
+    press(tree, 'About tab');
+    press(tree, 'Reviews tab');
+    expect(onLoadReviews).toHaveBeenCalledTimes(1);
+    const t = all(tree);
+    expect(t).toContain('User1');
+    expect(t).toContain('Supporter');
+    expect(t).toContain('★★★★½');
+    expect(t).toContain('Contains spoilers');
+    expect(t).not.toContain('SECRET'); // a spoiler's text is not in the list
+  });
+
+  test('error shows Retry, empty shows a message, Load more asks for the next offset', async () => {
+    const onLoadReviews = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('x'))
+      .mockResolvedValueOnce({reviews: [rev(1)], hasMore: true})
+      .mockResolvedValueOnce({reviews: [rev(2)], hasMore: false});
+    const tree = render({onLoadReviews});
+    press(tree, 'Reviews tab');
+    await flush();
+    expect(all(tree)).toContain('Could not load reviews.');
+    const press2 = (label: string) => act(() => tree.root.findAll((n: any) => n.props.onPress && texts(n).includes(label))[0].props.onPress());
+    press2('Retry');
+    await flush();
+    press2('Load more');
+    await flush();
+    expect(onLoadReviews.mock.calls.map(c => c[0])).toEqual([0, 0, 1]);
+    expect(all(tree)).toContain('User2');
+    expect(all(tree)).not.toContain('Load more');
+
+    const empty = render({onLoadReviews: jest.fn().mockResolvedValue({reviews: [], hasMore: false})});
+    press(empty, 'Reviews tab');
+    await flush();
+    expect(all(empty)).toContain('No reviews yet.');
+  });
+
+  test('More opens the full review and Back to reviews closes it', async () => {
+    const tree = render({onLoadReviews: jest.fn().mockResolvedValue({reviews: [rev(1, {spoiler: true, text: 'SECRET full text'})], hasMore: false})});
+    press(tree, 'Reviews tab');
+    await flush();
+    press(tree, "More of User1's review");
+    expect(all(tree)).toContain('SECRET full text');
+    press(tree, 'Back to reviews');
+    expect(all(tree)).not.toContain('SECRET full text');
+  });
+});

@@ -98,6 +98,39 @@ export async function saveJournal(auth: Auth, {bookId, editionId, event, entry, 
   return saved.id;
 }
 
+// A review on a library entry, as hardcover.app's edit form has it. Needs write:reviews. One UpdateUserBook request (the
+// SDK's library.update has no sponsored flag), so a retry never leaves half of it saved. No rating leaves the existing one
+// alone (null would clear it); sponsored is only sent when set, because the read side does not return it.
+export interface ReviewInput {
+  markdown: string;
+  hasSpoilers: boolean;
+  sponsored: boolean;
+  notes: string; // private notes; '' clears them, so the card is always prefilled from fetchReview
+  rating?: number | null;
+}
+
+export async function saveReview(auth: Auth, userBookId: number, {markdown, hasSpoilers, sponsored, notes, rating}: ReviewInput): Promise<void> {
+  if (!markdown || !markdown.trim()) throw new Error('refusing to save an empty review');
+  if (rating != null && !(rating >= 0.5 && rating <= 5 && rating * 2 === Math.round(rating * 2))) throw new Error(`refusing to save: bad rating ${rating}`);
+  await sdk(auth).request(operations.UpdateUserBook, {
+    id: userBookId,
+    object: {
+      ...(rating != null ? {rating} : {}),
+      review_markdown: markdown.trim(),
+      review_has_spoilers: hasSpoilers,
+      ...(sponsored ? {sponsored_review: true} : {}),
+      private_notes: notes.trim(),
+    },
+  });
+}
+
+// What the entry already holds, to prefill the card (saving replaces it).
+export async function fetchReview(auth: Auth, userBookId: number): Promise<{markdown: string; hasSpoilers: boolean; notes: string; rating: number | null}> {
+  const e = await sdk(auth).library.get(userBookId);
+  if (!e) throw new Error('library entry not found');
+  return {markdown: e.reviewMarkdown ?? '', hasSpoilers: e.reviewHasSpoilers, notes: e.privateNotes ?? '', rating: e.rating};
+}
+
 // Which books do these ISBN-13s belong to? Different editions of one book share a book_id.
 export async function bookIdsForIsbns(auth: Auth, isbns: string[]): Promise<number[]> {
   const editions = await sdk(auth).books.findByIsbn(isbns);
@@ -148,12 +181,18 @@ export async function saveProgress(auth: Auth, item: ReadingItem, pages: number)
 // The `mine` editions are the ones the reader already uses; they come along even when they are not among the 100 listed.
 export type BookDetail = Book & {editions: Edition[]};
 const EDITIONS_SHOWN = 100;
+const EDITIONS_MAX = 300; // the picker searches these; every further 100 is another request on each detail page load
 
 export async function fetchBookDetail(auth: Auth, bookId: number, editionIds: number[] = []): Promise<BookDetail> {
   const c = sdk(auth);
-  const [book, listed] = await Promise.all([c.books.get(bookId), c.books.editions(bookId, {limit: EDITIONS_SHOWN})]);
+  const [book, first] = await Promise.all([c.books.get(bookId), c.books.editions(bookId, {limit: EDITIONS_SHOWN})]);
   if (!book) throw new Error(`Hardcover: book ${bookId} not found`);
-  const editions = listed.items;
+  const editions = [...first.items];
+  // hasMore is true after a full page, so a book with under 100 editions makes no extra request.
+  for (let page = first; page.hasMore && editions.length < EDITIONS_MAX; ) {
+    page = await c.books.editions(bookId, {limit: EDITIONS_SHOWN, offset: editions.length});
+    editions.push(...page.items);
+  }
   const missing = editionIds.filter(id => !editions.some(e => e.id === id));
   const mine = await Promise.all(missing.map(id => c.books.edition(id)));
   return {...book, editions: [...editions, ...mine.filter((e): e is NonNullable<typeof e> => !!e)]};
@@ -194,4 +233,51 @@ export async function addOwned(auth: Auth, bookId: number, editionId?: number): 
   await c.library.markOwned(edition.id); // safe to repeat, so a failed add below can simply be retried
   await c.library.add(bookId, {imported: true, editionId: edition.id});
   return {id: edition.id, pages: edition.pages ?? null};
+}
+
+// ---- other readers' reviews ----
+export interface PublicReview {
+  id: number;
+  user: string;
+  supporter: boolean;
+  rating: number | null; // 0.5 steps
+  text: string;
+  spoiler: boolean;
+  date: string; // YYYY-MM-DD
+}
+
+export const REVIEWS_PAGE = 10;
+
+// Public reviews only (privacy_setting_id 1), newest first. One extra row is asked for to know whether there is more.
+// shortcut: the field names (user.name, user.flair as the Supporter badge) come from the SDK's generated schema and are
+// not yet run against the live API; verify with a read-only query before release.
+const REVIEWS_QUERY = `query Reviews($bookId: Int!, $limit: Int!, $offset: Int!) {
+  user_books(where: {book_id: {_eq: $bookId}, has_review: {_eq: true}, privacy_setting_id: {_eq: 1}}, order_by: {reviewed_at: desc_nulls_last}, limit: $limit, offset: $offset) {
+    id rating review_raw review_has_spoilers reviewed_at
+    user { name flair }
+  }
+}`;
+
+type ReviewRow = {
+  id: number;
+  rating: number | null;
+  review_raw: string | null;
+  review_has_spoilers: boolean | null;
+  reviewed_at: string | null;
+  user: {name: string | null; flair: string | null} | null;
+};
+
+export async function fetchReviews(auth: Auth, bookId: number, offset = 0): Promise<{reviews: PublicReview[]; hasMore: boolean}> {
+  const data = await sdk(auth).graphql<{user_books: ReviewRow[]}>(REVIEWS_QUERY, {bookId, limit: REVIEWS_PAGE + 1, offset});
+  const rows = data.user_books ?? [];
+  const reviews = rows.slice(0, REVIEWS_PAGE).map(r => ({
+    id: r.id,
+    user: r.user?.name || 'Reader',
+    supporter: /supporter/i.test(r.user?.flair ?? ''),
+    rating: r.rating || null,
+    text: (r.review_raw ?? '').trim(),
+    spoiler: !!r.review_has_spoilers,
+    date: (r.reviewed_at ?? '').slice(0, 10),
+  }));
+  return {reviews, hasMore: rows.length > REVIEWS_PAGE};
 }

@@ -38,3 +38,10 @@ test('get hands out a copy', async () => {
   t.accessToken = 'changed';
   expect((await a.get())!.accessToken).toBe('x');
 });
+
+test('hasScope finds a scope in the space-separated grant', () => {
+  const {hasScope} = require('../src/auth');
+  expect(hasScope('read:library write:reviews', 'write:reviews')).toBe(true);
+  expect(hasScope('read:library write:library', 'write:reviews')).toBe(false);
+  expect(hasScope(undefined, 'write:reviews')).toBe(false);
+});
