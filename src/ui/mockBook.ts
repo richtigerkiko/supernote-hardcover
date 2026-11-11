@@ -43,6 +43,9 @@ export const MOCK_LONG: BookDetail = {
   editions: [
     {id: 'w1', format: 'Hardcover', publisher: 'Example Press', year: 1999, pages: 1248, lang: 'English'},
     {id: 'w3', format: 'Paperback', publisher: 'Example Press', year: 2001, pages: 1304, lang: 'English'},
+    {id: 'x1', format: 'Special Collector Illustrated Hardcover Edition', publisher: 'The Very Long Named Publishing House International', year: 1999, pages: 1248, lang: 'Portuguese (Brazilian)', isbn: '9781234567890'},
+    {id: 'x2', format: 'Paperback', publisher: 'Example Press', year: 2001, pages: 1304, lang: '', isbn: '9780306406157'},
+    {id: 'x3', format: 'Ebook', publisher: '', year: null, pages: 1248, lang: ''},
     {id: 'w7', format: 'Audiobook', publisher: 'Example Audio', year: 2016, pages: 0, lang: 'English', audio: true},
   ],
   editionId: 'w1',
