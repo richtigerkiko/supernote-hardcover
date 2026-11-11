@@ -26,6 +26,7 @@ export type TrackerError = Error & {status?: number; path?: string};
 interface Tracked {
   item: ReadingItem | null;
   pages: number | null; // edition page last pushed, or first seen
+  total: number; // reader pages at the last touch
   pending: number | null; // edition page waiting to be pushed
   retryAt: number;
   checkedAt: number;
@@ -52,12 +53,15 @@ export function createTracker({resolve, push, now = Date.now}: TrackerDeps) {
       b.checkedAt = now(); // also when resolve throws (offline), so it is not retried on every touch; the old item stays
       const was = b.item;
       b.item = await resolve(path);
-      if (!was) b.pages = toPages(page, total, b.item?.editionPages ?? null); // a matched book keeps its page and pending push
+      if (was?.editionPages !== b.item?.editionPages) {
+        b.pages = toPages(page, total, b.item?.editionPages ?? null); // newly matched or a new edition: the old pages are in other units, so rebase
+        b.pending = null;
+      }
       if (!b.item) b.pending = null; // it left the list: nothing to push
     }
     if (!b) {
       const item = await resolve(path);
-      books.set(path, {item, pages: toPages(page, total, item?.editionPages ?? null), pending: null, retryAt: 0, checkedAt: now()});
+      books.set(path, {item, pages: toPages(page, total, item?.editionPages ?? null), total, pending: null, retryAt: 0, checkedAt: now()});
       return;
     }
     if (!b.item) return;
@@ -65,6 +69,13 @@ export function createTracker({resolve, push, now = Date.now}: TrackerDeps) {
     if (pages === null) {
       b.pending = null;
       state.lastError = Object.assign(new Error(`no page count for ${b.item.title}`), {path});
+      return;
+    }
+    if (total !== b.total) {
+      // The book reflowed (font, orientation): rounding can move the edition page by one at the same place, which is
+      // not a page turn. Rebase the baseline; a page already waiting to be pushed stays.
+      b.total = total;
+      b.pages = pages;
       return;
     }
     b.pending = pages === b.pages ? null : pages; // still (or back) on the page that was last sent

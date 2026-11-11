@@ -178,11 +178,13 @@ describe('reflow', () => {
   test('a smaller or larger font at the same place pushes nothing; reading on pushes', async () => {
     const {tracker, pushes} = setup();
     await tracker.tick(at(81, 332)); // edition page 82
-    await tracker.tick(at(40, 166)); // same place, smaller font: still 82
-    await tracker.tick(at(163, 664)); // same place, larger font: still 82
+    await tracker.tick(at(58, 240)); // same place, smaller font: rounds to 81
+    await tracker.tick(at(98, 400)); // same place, larger font: rounds to 82
     expect(pushes).toEqual([]);
-    await tracker.tick(at(66, 240)); // 67/240: edition page 92
-    expect(pushes).toEqual([edition(66, 240)]);
+    await tracker.tick(at(66, 240)); // font changed back: rebase only
+    expect(pushes).toEqual([]);
+    await tracker.tick(at(70, 240)); // a real page turn
+    expect(pushes).toEqual([edition(70, 240)]);
   });
 });
 
@@ -212,6 +214,20 @@ describe('re-check of matched books', () => {
     const tracker = createTracker({now: () => t, resolve: resolveFn, push: pushFn});
     return {tracker, advance: (ms: number) => (t += ms)};
   };
+
+  test('a refreshed edition with another page count rebases instead of pushing the same place', async () => {
+    let item: ReadingItem = BUTCHER;
+    const pushes: number[] = [];
+    const {tracker, advance} = run(async () => item, async (_it, pages) => void pushes.push(pages));
+    await tracker.tick(at(81));
+    item = {...BUTCHER, editionPages: 660};
+    advance(601_000);
+    await tracker.tick(at(81)); // re-checked: same place, other units
+    expect(pushes).toEqual([]);
+    advance(11_000);
+    await tracker.tick(at(86));
+    expect(pushes).toEqual([Math.round((87 / TOTAL) * 660)]);
+  });
 
   test('after the interval a matched book picks up a new read id', async () => {
     let item: ReadingItem = {...BUTCHER, read: readOf(1)};
