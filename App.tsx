@@ -10,6 +10,7 @@ import React, {useEffect, useState} from 'react';
 import {Pressable, Text, View} from 'react-native';
 import {PluginManager} from 'sn-plugin-lib';
 import DetailPage, {BookDetail} from './src/ui/DetailPage';
+import QrCode from './src/ui/QrCode';
 import JournalPage from './src/ui/JournalPage';
 import {MOCK_BOOK, MOCK_LONG} from './src/ui/mockBook';
 import {session} from './src/session';
@@ -18,10 +19,16 @@ import {session} from './src/session';
 const isFakeSdk = async () => (await PluginManager.getPluginName()) === 'sn-fake';
 const close = () => PluginManager.closePluginView();
 
-function Message({text, onClose}: {text: string; onClose: () => void}) {
+function Message({text, onClose, onSignIn, qr}: {text: string; onClose: () => void; onSignIn?: () => void; qr?: string}) {
   return (
     <View style={{flex: 1, backgroundColor: '#fff', padding: 40, justifyContent: 'center'}}>
+      {qr && <View style={{alignItems: 'center', marginBottom: 24}}><QrCode text={qr} size={340} /></View>}
       <Text style={{fontSize: 26, color: '#000', textAlign: 'center'}}>{text}</Text>
+      {onSignIn && (
+        <Pressable accessibilityRole="button" onPress={onSignIn} style={{height: 68, marginTop: 40, borderWidth: 3, borderColor: '#000', backgroundColor: '#000', alignItems: 'center', justifyContent: 'center'}}>
+          <Text style={{fontSize: 24, fontWeight: '700', color: '#fff'}}>Sign in</Text>
+        </Pressable>
+      )}
       <Pressable accessibilityRole="button" onPress={onClose} style={{height: 68, marginTop: 40, borderWidth: 3, borderColor: '#000', alignItems: 'center', justifyContent: 'center'}}>
         <Text style={{fontSize: 24, fontWeight: '700', color: '#000'}}>Close</Text>
       </Pressable>
@@ -36,6 +43,9 @@ export default function App(): React.JSX.Element {
   const [long, setLong] = useState(false);
   const [book, setBook] = useState<BookDetail | null>(null);
   const [message, setMessage] = useState('Loading…');
+  const [canSignIn, setCanSignIn] = useState(false); // the message offers the Sign in button
+  const [signingIn, setSigningIn] = useState(false);
+  const [qr, setQr] = useState(''); // the sign-in link as a QR code, while waiting for the approval
   const [journal, setJournal] = useState<{passage: string} | null>(null); // set: the hardcover-select page is shown
 
   useEffect(() => {
@@ -50,11 +60,15 @@ export default function App(): React.JSX.Element {
       const mine = ++latest;
       setBook(null);
       setMessage('Loading…');
+      setCanSignIn(false);
+      setQr('');
       setTracking(false);
       setSyncNote('');
       setJournal(null);
       const isJournal = session.mode === 'journal';
-      Promise.all([session.api?.load(), isJournal ? session.api?.passage() : ''])
+      // The selection is taken only once a book is shown, so a sign-in in between does not lose it.
+      Promise.resolve(session.api?.load())
+        .then((r: any) => (r.book && isJournal ? session.api!.passage().then(p => [r, p]) : [r, '']))
         .then(([r, passage]: any) => {
           if (mine !== latest) return;
           if (r.book) {
@@ -62,7 +76,10 @@ export default function App(): React.JSX.Element {
             setBook(r.book);
             setTracking(r.tracking);
             setSyncNote(r.sync);
-          } else setMessage(r.message);
+          } else {
+            setMessage(r.message);
+            setCanSignIn(!!r.signIn);
+          }
         })
         .catch((e: any) => mine === latest && setMessage(`Could not load the book: ${String(e?.message ?? e)}`));
     };
@@ -104,7 +121,29 @@ export default function App(): React.JSX.Element {
     );
   }
 
-  if (!book) return <Message text={message} onClose={close} />;
+  const signIn = () => {
+    if (signingIn) return;
+    setSigningIn(true);
+    session.api!
+      .signIn((uri, code, qr) => {
+        setQr(qr);
+        setMessage(`On any device open
+${uri}
+and enter the code
+
+${code}`);
+      })
+      .then(
+        ok => ok && session.opened(), // reload: the account is connected now (false: cancelled by a reload)
+        (e: any) => {
+          setQr('');
+          setMessage(`Sign-in failed: ${String(e?.message ?? e)}`);
+          setCanSignIn(true);
+        },
+      )
+      .finally(() => setSigningIn(false));
+  };
+  if (!book) return <Message text={message} qr={qr} onClose={close} onSignIn={canSignIn && !signingIn ? signIn : undefined} />;
   if (journal) {
     return (
       <JournalPage

@@ -19,7 +19,7 @@ Copy `HardcoverSync.snplg` to the device's `MyStyle` folder, then Settings > App
 
 ## Build from source
 
-Needs Node, JDK 17 and the Android SDK (platform 35, build-tools 35.0.0, NDK 27.1.12297006), and your Hardcover API token as `HARDCOVER_KEY` in `../../.env`.
+Needs Node, JDK 17 and the Android SDK (platform 35, build-tools 35.0.0, NDK 27.1.12297006), and your Hardcover OAuth client id (a public client with the device grant) as `HARDCOVER_OAUTH_CLIENT_ID` in `../../.env`.
 
 ```powershell
 npm install
@@ -27,7 +27,7 @@ npm run build   # writes build\outputs\HardcoverSync.snplg
 npm test
 ```
 
-The token is bundled into the package, so don't share a built `.snplg`.
+No token is bundled: open the Hardcover page on the device and sign in with the code it shows.
 
 ## Notes
 

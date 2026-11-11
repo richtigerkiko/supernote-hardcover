@@ -27,7 +27,9 @@ export interface FileMeta extends EpubMeta {
 // copy working, because the plugin must keep tracking without persistence. There are no timers (they do not run in
 // some lifecycle states): a change is written at once, one write at a time, a write requested during another is
 // coalesced into one more write of the latest data.
-export function createJsonFile<T extends object>(native: NativeFs | null, path: string, defaults: Partial<T> = {}): JsonFile<T> {
+// `strict` makes save() reject when a write fails, for data that must not silently stay stale (the OAuth tokens: a
+// rotated refresh token that was not written would be sent again after a restart, which revokes the sign-in).
+export function createJsonFile<T extends object>(native: NativeFs | null, path: string, defaults: Partial<T> = {}, strict = false): JsonFile<T> {
   let data: T | null = null;
   let loading: Promise<T> | null = null;
   let writing: Promise<void> | null = null;
@@ -57,7 +59,8 @@ export function createJsonFile<T extends object>(native: NativeFs | null, path: 
         dirty = false;
         await native!.writeFile(path, JSON.stringify(data));
       }
-    } catch {
+    } catch (e) {
+      if (strict) throw e;
       /* keep the in-memory copy; the next change tries again */
     } finally {
       writing = null;

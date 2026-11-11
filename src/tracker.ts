@@ -98,6 +98,12 @@ export function createTracker({resolve, push, now = Date.now}: TrackerDeps) {
 
   return {
     state,
+    // After a sign-in: the cached items hold the previous account's ids (userBookId, read id), so every book resolves
+    // again at its next touch (no push on first sight) and an error from the old credentials is gone.
+    reset() {
+      books.clear();
+      state.lastError = null;
+    },
     forget: (path: string) => books.delete(path), // the next touch re-reads the book (its edition changed); no push on first sight
     async tick(sample: Sample | null): Promise<void> {
       // No timers run in some lifecycle states, so a hung call (network, SDK) is detected by wall clock: after

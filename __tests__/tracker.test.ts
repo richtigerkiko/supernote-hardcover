@@ -300,3 +300,15 @@ test('a lookup error names the file, and a push that settles after the book left
   await hung;
   expect(tracker.state.lastError).toBeNull(); // the late push counts as done; no TypeError from b.item being null by now
 });
+
+test("reset forgets every book and the last error: the next touch is a first sight again", async () => {
+  const {tracker, pushes, resolves} = setup({pushFails: "401"});
+  await tracker.tick(at(81));
+  await tracker.tick(at(86)); // a push fails, so lastError is set
+  expect(tracker.state.lastError).not.toBeNull();
+  tracker.reset();
+  expect(tracker.state.lastError).toBeNull();
+  await tracker.tick(at(86)); // resolves again, baseline only
+  expect(resolves.length).toBe(2);
+  expect(pushes).toEqual([]);
+});

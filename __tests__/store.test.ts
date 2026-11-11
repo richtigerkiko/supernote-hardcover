@@ -170,3 +170,20 @@ describe('createSettings', () => {
     expect(await restarted.get('quotePrivacy')).toBe(2);
   });
 });
+
+describe("createJsonFile strict", () => {
+  test("a failed write rejects in strict mode and is swallowed otherwise", async () => {
+    const n = fakeNative();
+    n.failWrite = true;
+    const strict = createJsonFile<Json>(n, "/d/t.json", {}, true);
+    (await strict.load()).a = 1;
+    await expect(strict.save()).rejects.toThrow("WRITE_FAILED");
+    n.failWrite = false;
+    await strict.save(); // the next save retries and works
+    expect(JSON.parse(n.files["/d/t.json"])).toEqual({a: 1});
+    n.failWrite = true;
+    const loose = jf(n, "/d/l.json");
+    (await loose.load()).b = 2;
+    await expect(loose.save()).resolves.toBeUndefined();
+  });
+});

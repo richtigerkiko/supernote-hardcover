@@ -15,11 +15,12 @@ export interface Sample {
 }
 
 /** What the page shows after load(): a book, or a message when there is nothing to show. */
-export type LoadResult = {message: string} | {book: PageBook; tracking: boolean; sync: string};
+export type LoadResult = {message: string; signIn?: boolean} | {book: PageBook; tracking: boolean; sync: string};
 
 /** What plugin.ts hands the page; the page never sees the SDK or the token. */
 export interface SessionApi {
   load(): Promise<LoadResult>;
+  signIn(onCode: (uri: string, code: string, qr: string) => void): Promise<boolean>;
   setTracking(on: boolean): Promise<void>;
   setEdition(editionId: string): Promise<void>;
   passage(): Promise<string>;

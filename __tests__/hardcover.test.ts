@@ -195,3 +195,11 @@ describe('saveJournal', () => {
     expect(mockSdk.journal.add).not.toHaveBeenCalled();
   });
 });
+
+test("an OAuth session is passed to the SDK as auth, not as a token", async () => {
+  const session = {getAccessToken: async () => "hc_at_1"};
+  mockSdk.library.list = jest.fn().mockResolvedValue({items: [], hasMore: false});
+  await fetchUserBooks(session);
+  expect(mockSdk.options).toMatchObject({auth: session, pace: false, maxRetries: 0});
+  expect(mockSdk.options).not.toHaveProperty("token");
+});
