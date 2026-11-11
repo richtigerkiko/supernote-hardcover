@@ -6,6 +6,7 @@
 // does not remount the page: plugin.ts calls opened() on every press and the page reloads its book from it.
 import type {BookDetail as PageBook} from './ui/DetailPage';
 import type {Entry} from './ui/JournalPage';
+import type {Review} from './ui/ReviewPage';
 
 /** One reader sample: the open file, its 0-based page and the total pages. */
 export interface Sample {
@@ -27,7 +28,9 @@ export interface SessionApi {
   saveJournal(entry: Entry): Promise<void>;
   setStatus(label: string): Promise<void>;
   addToLibrary(): Promise<void>;
-  writeReview(): Promise<void>;
+  /** The review to start from (what the entry holds). false: the stored sign-in lacked write:reviews and was dropped, so reload to sign in again. Rejects with a message when the book is not in the library. */
+  writeReview(): Promise<Review | false>;
+  saveReview(review: Review): Promise<void>;
 }
 
 interface Session {

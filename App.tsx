@@ -12,6 +12,7 @@ import {PluginManager} from 'sn-plugin-lib';
 import DetailPage, {BookDetail} from './src/ui/DetailPage';
 import QrCode from './src/ui/QrCode';
 import JournalPage from './src/ui/JournalPage';
+import ReviewPage, {BLANK_REVIEW, type Review} from './src/ui/ReviewPage';
 import {MOCK_BOOK, MOCK_LONG} from './src/ui/mockBook';
 import {session} from './src/session';
 
@@ -47,6 +48,7 @@ export default function App(): React.JSX.Element {
   const [signingIn, setSigningIn] = useState(false);
   const [qr, setQr] = useState(''); // the sign-in link as a QR code, while waiting for the approval
   const [journal, setJournal] = useState<{passage: string} | null>(null); // set: the hardcover-select page is shown
+  const [review, setReview] = useState<Review | null>(null); // set: the review card is shown, starting from this
 
   useEffect(() => {
     isFakeSdk().then(setPreview, () => setPreview(false));
@@ -65,6 +67,7 @@ export default function App(): React.JSX.Element {
       setTracking(false);
       setSyncNote('');
       setJournal(null);
+      setReview(null);
       const isJournal = session.mode === 'journal';
       // The selection is taken only once a book is shown, so a sign-in in between does not lose it.
       Promise.resolve(session.api?.load())
@@ -95,15 +98,18 @@ export default function App(): React.JSX.Element {
   };
 
   if (preview) {
-    // preview only: mock data. The review button flips between the normal and the worst-case mock; Close on the detail
-    // page opens the journal card (its Close and saves come back here; every second save fails, to see Retry).
+    // preview only: mock data. The Tracking toggle also flips between the normal and the worst-case mock; Write review
+    // opens the review card and Close on the detail page the journal card (their Close and saves come back here; every
+    // second save fails, to see Retry).
+    const flaky = () => new Promise<void>((ok, fail) => (Date.now() % 2 ? ok() : fail(new Error('Network request failed'))));
+    if (review) return <ReviewPage book={book ?? MOCK_BOOK} initial={review} onSave={flaky} onClose={() => setReview(null)} />;
     if (journal) {
       return (
         <JournalPage
           book={book ?? MOCK_BOOK}
           passage={journal.passage}
           onSetEdition={editionId => setBook({...(book ?? MOCK_BOOK), editionId, editionSaved: true})}
-          onSave={() => new Promise((ok, fail) => (Date.now() % 2 ? ok() : fail(new Error('Network request failed'))))}
+          onSave={flaky}
           onClose={() => setJournal(null)}
         />
       );
@@ -112,9 +118,12 @@ export default function App(): React.JSX.Element {
       <DetailPage
         book={long ? MOCK_LONG : (book ?? MOCK_BOOK)}
         tracking={tracking}
-        onToggleTracking={() => setTracking(!tracking)}
+        onToggleTracking={() => {
+          setTracking(!tracking);
+          setLong(l => !l);
+        }}
         onClose={() => setJournal({passage: 'Call me Ishmael. Some years ago, never mind how long precisely, having little or no money in my purse, I thought I would sail about a little and see the watery part of the world.'})}
-        onWriteReview={() => setLong(l => !l)}
+        onWriteReview={() => setReview(BLANK_REVIEW)}
         onSetStatus={status => setBook({...(book ?? MOCK_BOOK), status})}
         onSetEdition={editionId => setBook({...(book ?? MOCK_BOOK), editionId, editionSaved: true})}
       />
@@ -144,6 +153,7 @@ ${code}`);
       .finally(() => setSigningIn(false));
   };
   if (!book) return <Message text={message} qr={qr} onClose={close} onSignIn={canSignIn && !signingIn ? signIn : undefined} />;
+  if (review) return <ReviewPage book={book} initial={review} onSave={r => session.api!.saveReview(r)} onClose={() => setReview(null)} />;
   if (journal) {
     return (
       <JournalPage
@@ -165,7 +175,12 @@ ${code}`);
       syncNote={syncNote}
       onToggleTracking={toggle}
       onClose={close}
-      onWriteReview={() => session.api?.writeReview()}
+      onWriteReview={() =>
+        Promise.resolve(session.api?.writeReview()).then(
+          start => (start ? setReview(start) : session.opened()), // false: signed out to ask for write:reviews, reload shows Sign in
+          (e: any) => setSyncNote(String(e?.message ?? e)),
+        )
+      }
       onSetStatus={status => {
         const before = book.status;
         setBook({...book, status});

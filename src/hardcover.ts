@@ -98,6 +98,39 @@ export async function saveJournal(auth: Auth, {bookId, editionId, event, entry, 
   return saved.id;
 }
 
+// A review on a library entry, as hardcover.app's edit form has it. Needs write:reviews. One UpdateUserBook request (the
+// SDK's library.update has no sponsored flag), so a retry never leaves half of it saved. No rating leaves the existing one
+// alone (null would clear it); sponsored is only sent when set, because the read side does not return it.
+export interface ReviewInput {
+  markdown: string;
+  hasSpoilers: boolean;
+  sponsored: boolean;
+  notes: string; // private notes; '' clears them, so the card is always prefilled from fetchReview
+  rating?: number | null;
+}
+
+export async function saveReview(auth: Auth, userBookId: number, {markdown, hasSpoilers, sponsored, notes, rating}: ReviewInput): Promise<void> {
+  if (!markdown || !markdown.trim()) throw new Error('refusing to save an empty review');
+  if (rating != null && !(rating >= 0.5 && rating <= 5 && rating * 2 === Math.round(rating * 2))) throw new Error(`refusing to save: bad rating ${rating}`);
+  await sdk(auth).request(operations.UpdateUserBook, {
+    id: userBookId,
+    object: {
+      ...(rating != null ? {rating} : {}),
+      review_markdown: markdown.trim(),
+      review_has_spoilers: hasSpoilers,
+      ...(sponsored ? {sponsored_review: true} : {}),
+      private_notes: notes.trim(),
+    },
+  });
+}
+
+// What the entry already holds, to prefill the card (saving replaces it).
+export async function fetchReview(auth: Auth, userBookId: number): Promise<{markdown: string; hasSpoilers: boolean; notes: string; rating: number | null}> {
+  const e = await sdk(auth).library.get(userBookId);
+  if (!e) throw new Error('library entry not found');
+  return {markdown: e.reviewMarkdown ?? '', hasSpoilers: e.reviewHasSpoilers, notes: e.privateNotes ?? '', rating: e.rating};
+}
+
 // Which books do these ISBN-13s belong to? Different editions of one book share a book_id.
 export async function bookIdsForIsbns(auth: Auth, isbns: string[]): Promise<number[]> {
   const editions = await sdk(auth).books.findByIsbn(isbns);
