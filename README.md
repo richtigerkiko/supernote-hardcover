@@ -1,4 +1,4 @@
-# HardcoverSync (Supernote plugin)
+# supernote-hardcover (Supernote plugin)
 
 Keeps your [Hardcover](https://hardcover.app) reading progress up to date while you read EPUBs in DOC on a Supernote. Switch it on for a book, then just read.
 
@@ -15,7 +15,7 @@ It runs fully on the device. The only network traffic is to the Hardcover API.
 
 ## Install
 
-Copy `HardcoverSync.snplg` to the device's `MyStyle` folder, then Settings > Apps > Plugins > Add Plugin and select it. Open an EPUB, tap **Hardcover**, and turn Tracking on.
+Copy `supernote-hardcover.snplg` to the device's `MyStyle` folder, then Settings > Apps > Plugins > Add Plugin and select it. Open an EPUB, tap **Hardcover**, and turn Tracking on.
 
 ## Build from source
 
@@ -23,7 +23,7 @@ Needs Node, JDK 17 and the Android SDK (platform 35, build-tools 35.0.0, NDK 27.
 
 ```powershell
 npm install
-npm run build   # writes build\outputs\HardcoverSync.snplg
+npm run build   # writes build\outputs\supernote-hardcover.snplg
 npm test
 ```
 
