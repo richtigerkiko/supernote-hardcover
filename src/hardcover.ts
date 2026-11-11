@@ -148,12 +148,18 @@ export async function saveProgress(auth: Auth, item: ReadingItem, pages: number)
 // The `mine` editions are the ones the reader already uses; they come along even when they are not among the 100 listed.
 export type BookDetail = Book & {editions: Edition[]};
 const EDITIONS_SHOWN = 100;
+const EDITIONS_MAX = 300; // the picker searches these; every further 100 is another request on each detail page load
 
 export async function fetchBookDetail(auth: Auth, bookId: number, editionIds: number[] = []): Promise<BookDetail> {
   const c = sdk(auth);
-  const [book, listed] = await Promise.all([c.books.get(bookId), c.books.editions(bookId, {limit: EDITIONS_SHOWN})]);
+  const [book, first] = await Promise.all([c.books.get(bookId), c.books.editions(bookId, {limit: EDITIONS_SHOWN})]);
   if (!book) throw new Error(`Hardcover: book ${bookId} not found`);
-  const editions = listed.items;
+  const editions = [...first.items];
+  // hasMore is true after a full page, so a book with under 100 editions makes no extra request.
+  for (let page = first; page.hasMore && editions.length < EDITIONS_MAX; ) {
+    page = await c.books.editions(bookId, {limit: EDITIONS_SHOWN, offset: editions.length});
+    editions.push(...page.items);
+  }
   const missing = editionIds.filter(id => !editions.some(e => e.id === id));
   const mine = await Promise.all(missing.map(id => c.books.edition(id)));
   return {...book, editions: [...editions, ...mine.filter((e): e is NonNullable<typeof e> => !!e)]};
