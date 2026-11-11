@@ -2,6 +2,7 @@ name: Release
 on:
   push:
     branches: [master]
+  workflow_dispatch:
 permissions:
   contents: write
 concurrency: { group: release, cancel-in-progress: false }
@@ -53,4 +54,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="v${{ steps.ver.outputs.version }}-${{ steps.ver.outputs.code }}"
-          gh release create "$tag" build/outputs/HardcoverSync.snplg --target "$GITHUB_SHA" --generate-notes
+          flags=""
+          # manual runs on any branch but master publish a pre-release for testers
+          if [ "$GITHUB_REF_NAME" != master ]; then tag="$tag-dev"; flags="--prerelease"; fi
+          gh release create "$tag" build/outputs/HardcoverSync.snplg --target "$GITHUB_SHA" --generate-notes $flags
