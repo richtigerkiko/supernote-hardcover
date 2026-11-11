@@ -145,12 +145,24 @@ test('an SDK failure reaches the caller with its status (the 401 stop and the 42
 
 test('fetchBookDetail adds an edition that only the reader uses, once', async () => {
   mockSdk.books.get.mockResolvedValue({title: 'T'});
-  mockSdk.books.editions.mockResolvedValue({items: [{id: 1}, {id: 2}]});
+  mockSdk.books.editions.mockResolvedValue({items: [{id: 1}, {id: 2}], hasMore: false});
   mockSdk.books.edition.mockImplementation(async (id: number) => ({id}));
   const book = await fetchBookDetail('T', 5, [2, 300]);
   expect(book.editions.map(e => e.id)).toEqual([1, 2, 300]);
   expect(mockSdk.books.edition).toHaveBeenCalledTimes(1);
+  expect(mockSdk.books.editions).toHaveBeenCalledTimes(1);
   expect(mockSdk.books.editions).toHaveBeenCalledWith(5, {limit: 100});
+});
+
+test('fetchBookDetail loads further editions pages up to 300', async () => {
+  mockSdk.books.get.mockResolvedValue({title: 'T'});
+  mockSdk.books.editions.mockImplementation(async (_id: number, o: {offset?: number}) => ({
+    items: Array.from({length: 100}, (_x, i) => ({id: (o.offset ?? 0) + i})),
+    hasMore: true,
+  }));
+  const book = await fetchBookDetail('T', 5);
+  expect(book.editions).toHaveLength(300);
+  expect(mockSdk.books.editions).toHaveBeenLastCalledWith(5, {limit: 100, offset: 200});
 });
 
 test('fetchBookDetail throws for an unknown book and skips editions that no longer exist', async () => {
