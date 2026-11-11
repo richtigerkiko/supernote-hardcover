@@ -1,12 +1,11 @@
 name: Release
-on:
-  push:
-    branches: [master]
+on: workflow_dispatch
 permissions:
   contents: write
 concurrency: { group: release, cancel-in-progress: false }
 jobs:
   release:
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
