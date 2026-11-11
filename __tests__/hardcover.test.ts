@@ -1,5 +1,5 @@
 import type {ReadingItem} from '../src/hardcover';
-import {bookIdsForIsbns, fetchBookDetail, fetchUserBooks, localDate, progressInput, saveProgress, saveJournal, setStatus} from '../src/hardcover';
+import {bookIdsForIsbns, fetchBookDetail, fetchUserBooks, localDate, progressInput, saveProgress, saveJournal, saveReview, setStatus} from '../src/hardcover';
 
 // The SDK is the transport; these tests check what we send it and how we map what it returns.
 type Mocks = Record<string, jest.Mock>;
@@ -202,4 +202,21 @@ test("an OAuth session is passed to the SDK as auth, not as a token", async () =
   await fetchUserBooks(session);
   expect(mockSdk.options).toMatchObject({auth: session, pace: false, maxRetries: 0});
   expect(mockSdk.options).not.toHaveProperty("token");
+});
+
+describe('saveReview', () => {
+  test('sends only review fields, with the rating when given', async () => {
+    mockSdk.library.update = jest.fn().mockResolvedValue({});
+    await saveReview('T', 7, {markdown: ' great ', hasSpoilers: true, rating: 4.5});
+    expect(mockSdk.library.update).toHaveBeenCalledWith(7, {rating: 4.5, review: {markdown: 'great', hasSpoilers: true}});
+    await saveReview('T', 7, {markdown: 'ok', hasSpoilers: false});
+    expect(mockSdk.library.update).toHaveBeenLastCalledWith(7, {review: {markdown: 'ok', hasSpoilers: false}});
+  });
+
+  test('empty text and bad ratings are refused before any request', async () => {
+    mockSdk.library.update = jest.fn();
+    await expect(saveReview('T', 7, {markdown: '  ', hasSpoilers: false})).rejects.toThrow(/empty/);
+    await expect(saveReview('T', 7, {markdown: 'x', hasSpoilers: false, rating: 4.3})).rejects.toThrow(/rating/);
+    expect(mockSdk.library.update).not.toHaveBeenCalled();
+  });
 });

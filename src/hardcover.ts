@@ -98,6 +98,20 @@ export async function saveJournal(auth: Auth, {bookId, editionId, event, entry, 
   return saved.id;
 }
 
+// A review (and optional rating) on a library entry. Needs write:reviews. Only review fields are sent; no rating leaves the
+// existing one alone (null would clear it).
+export interface ReviewInput {
+  markdown: string;
+  hasSpoilers: boolean;
+  rating?: number | null;
+}
+
+export async function saveReview(auth: Auth, userBookId: number, {markdown, hasSpoilers, rating}: ReviewInput): Promise<void> {
+  if (!markdown || !markdown.trim()) throw new Error('refusing to save an empty review');
+  if (rating != null && !(rating >= 0.5 && rating <= 5 && rating * 2 === Math.round(rating * 2))) throw new Error(`refusing to save: bad rating ${rating}`);
+  await sdk(auth).library.update(userBookId, {...(rating != null ? {rating} : {}), review: {markdown: markdown.trim(), hasSpoilers}});
+}
+
 // Which books do these ISBN-13s belong to? Different editions of one book share a book_id.
 export async function bookIdsForIsbns(auth: Auth, isbns: string[]): Promise<number[]> {
   const editions = await sdk(auth).books.findByIsbn(isbns);
