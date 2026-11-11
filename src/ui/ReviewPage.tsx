@@ -5,18 +5,31 @@ import type {BookDetail} from './DetailPage';
 // Review card, presentational like JournalPage: no SDK, everything arrives as props.
 // Same e-ink rules: black on white, borders instead of greys, tap targets of at least 48 dp, text of at least 18 sp.
 
-export type Review = {markdown: string; hasSpoilers: boolean; rating?: number};
+export type Review = {markdown: string; hasSpoilers: boolean; sponsored: boolean; notes: string; rating?: number};
+export const BLANK_REVIEW: Review = {markdown: '', hasSpoilers: false, sponsored: false, notes: ''};
 
 type Props = {
   book: BookDetail;
+  initial?: Review; // what the entry already holds; saving replaces it
   onSave: (r: Review) => Promise<void>; // rejects with Error on failure
   onClose: () => void;
 };
 
-export default function ReviewPage({book, onSave, onClose}: Props) {
-  const [text, setText] = useState('');
-  const [rating, setRating] = useState(0); // 0 = no rating, else 0.5 to 5 in half steps
-  const [spoilers, setSpoilers] = useState(false);
+function Check({label, on, busy, onPress}: {label: string; on: boolean; busy: boolean; onPress: () => void}) {
+  return (
+    <Pressable accessibilityRole="checkbox" accessibilityLabel={label} accessibilityState={{checked: on, disabled: busy}} disabled={busy} style={styles.check} onPress={onPress}>
+      <View style={[styles.box, on && styles.fill]}>{on ? <Text style={[styles.checkMark, styles.white]}>✓</Text> : null}</View>
+      <Text style={styles.line}>{label}</Text>
+    </Pressable>
+  );
+}
+
+export default function ReviewPage({book, initial = BLANK_REVIEW, onSave, onClose}: Props) {
+  const [text, setText] = useState(initial.markdown);
+  const [rating, setRating] = useState(initial.rating ?? 0); // 0 = no rating, else 0.5 to 5 in half steps
+  const [spoilers, setSpoilers] = useState(initial.hasSpoilers);
+  const [sponsored, setSponsored] = useState(initial.sponsored);
+  const [notes, setNotes] = useState(initial.notes);
   const [state, setState] = useState<'editing' | 'saving' | 'saved' | 'error'>('editing');
   const [error, setError] = useState('');
   const busy = state === 'saving';
@@ -25,7 +38,7 @@ export default function ReviewPage({book, onSave, onClose}: Props) {
   const save = async () => {
     setState('saving');
     try {
-      await onSave({markdown: text.trim(), hasSpoilers: spoilers, ...(rating ? {rating} : {})});
+      await onSave({markdown: text.trim(), hasSpoilers: spoilers, sponsored, notes: notes.trim(), ...(rating ? {rating} : {})});
       setState('saved');
     } catch (e: any) {
       setError(e?.message || 'Could not save.');
@@ -43,7 +56,7 @@ export default function ReviewPage({book, onSave, onClose}: Props) {
               <Text style={styles.closeText}>✕</Text>
             </Pressable>
           </View>
-          <Text style={[styles.line, styles.bold]} numberOfLines={2}>
+          <Text style={[styles.line, styles.bold]} numberOfLines={1}>
             {book.title}
           </Text>
           {state === 'saved' ? (
@@ -76,9 +89,10 @@ export default function ReviewPage({book, onSave, onClose}: Props) {
                 </Pressable>
               </View>
               <TextInput
-                style={[styles.input, {height: 8 * 28 + 24}]}
+                accessibilityLabel="Review"
+                style={[styles.input, {height: 6 * 28 + 24}]}
                 multiline
-                numberOfLines={8}
+                numberOfLines={6}
                 textAlignVertical="top"
                 editable={!busy}
                 placeholder="What did you think?"
@@ -86,15 +100,23 @@ export default function ReviewPage({book, onSave, onClose}: Props) {
                 value={text}
                 onChangeText={setText}
               />
-              <Pressable
-                accessibilityRole="checkbox"
-                accessibilityState={{checked: spoilers, disabled: busy}}
-                disabled={busy}
-                style={styles.check}
-                onPress={() => setSpoilers(s => !s)}>
-                <View style={[styles.box, spoilers && styles.fill]}>{spoilers ? <Text style={[styles.checkMark, styles.white]}>✓</Text> : null}</View>
-                <Text style={styles.line}>This review contains spoilers</Text>
-              </Pressable>
+              <Check label="This review contains spoilers" on={spoilers} busy={busy} onPress={() => setSpoilers(v => !v)} />
+              <Check label="Sponsored or ARC review" on={sponsored} busy={busy} onPress={() => setSponsored(v => !v)} />
+              <View>
+                <Text style={styles.label}>Private notes</Text>
+                <TextInput
+                  accessibilityLabel="Private notes"
+                  style={[styles.input, {height: 3 * 28 + 24}]}
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                  editable={!busy}
+                  placeholder="For your eyes only."
+                  placeholderTextColor={BLACK}
+                  value={notes}
+                  onChangeText={setNotes}
+                />
+              </View>
               {state === 'error' ? <Text style={[styles.line, styles.bold]}>{error}</Text> : null}
               <Pressable
                 accessibilityRole="button"
@@ -129,6 +151,7 @@ const styles = StyleSheet.create({
   stepText: {fontSize: 28, fontWeight: '700', color: BLACK},
   ratingText: {fontSize: 24, fontWeight: '700', color: BLACK},
   input: {fontSize: 20, lineHeight: 28, borderWidth: 2, borderColor: BLACK, padding: 12, color: BLACK},
+  label: {fontSize: 18, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', color: BLACK, marginBottom: 6},
   check: {flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 56},
   box: {width: 40, height: 40, borderWidth: 3, borderColor: BLACK, alignItems: 'center', justifyContent: 'center'},
   checkMark: {fontSize: 26, fontWeight: '700'},

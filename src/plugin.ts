@@ -26,6 +26,7 @@ import {
   fetchUserBooks,
   saveJournal,
   saveReview,
+  fetchReview,
   saveProgress,
   searchBooks,
   setStatus,
@@ -453,17 +454,20 @@ const api: SessionApi = {
     const c = current;
     if (!c) throw new Error('no book loaded');
     if (!c.item.userBookId) throw new Error('add the book to your library first');
-    if (hasScope((await oauth.tokens())?.scope, 'write:reviews')) return true;
+    if (hasScope((await oauth.tokens())?.scope, 'write:reviews')) {
+      const r = await fetchReview(oauth, c.item.userBookId);
+      return {markdown: r.markdown, hasSpoilers: r.hasSpoilers, sponsored: false, notes: r.notes, ...(r.rating ? {rating: r.rating} : {})};
+    }
     if (!(await dialog('Writing reviews needs a new sign-in with more access. Sign in again now?', 'Cancel', 'Sign in', false))) throw new Error('Reviews need a new sign-in.');
     await oauth.signOut();
     return false;
   },
-  async saveReview({markdown, hasSpoilers, rating}) {
+  async saveReview(r) {
     const c = current;
     if (!c) throw new Error('no book loaded');
     if (!c.item.userBookId) throw new Error('add the book to your library first');
     await needPermissions();
-    await saveReview(oauth, c.item.userBookId, {markdown, hasSpoilers, rating});
+    await saveReview(oauth, c.item.userBookId, r);
     log('review saved for', c.item.title);
   },
 };

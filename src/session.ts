@@ -28,8 +28,8 @@ export interface SessionApi {
   saveJournal(entry: Entry): Promise<void>;
   setStatus(label: string): Promise<void>;
   addToLibrary(): Promise<void>;
-  /** true: open the review card. false: the stored sign-in lacked write:reviews and was dropped, so reload to sign in again. Rejects with a message when the book is not in the library. */
-  writeReview(): Promise<boolean>;
+  /** The review to start from (what the entry holds). false: the stored sign-in lacked write:reviews and was dropped, so reload to sign in again. Rejects with a message when the book is not in the library. */
+  writeReview(): Promise<Review | false>;
   saveReview(review: Review): Promise<void>;
 }
 

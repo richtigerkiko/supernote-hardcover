@@ -1,5 +1,5 @@
 import type {ReadingItem} from '../src/hardcover';
-import {bookIdsForIsbns, fetchBookDetail, fetchUserBooks, localDate, progressInput, saveProgress, saveJournal, saveReview, setStatus} from '../src/hardcover';
+import {bookIdsForIsbns, fetchBookDetail, fetchUserBooks, localDate, progressInput, saveProgress, saveJournal, saveReview, fetchReview, setStatus} from '../src/hardcover';
 
 // The SDK is the transport; these tests check what we send it and how we map what it returns.
 type Mocks = Record<string, jest.Mock>;
@@ -17,7 +17,7 @@ jest.mock('@hardcover/sdk', () => ({
   },
   JournalEvent: {Quote: 'quote', Note: 'note'},
   PrivacySetting: {Public: 1, Follows: 2, Private: 3},
-  operations: {UpdateUserBookRead: 'UPDATE', AddUserBookRead: 'ADD'},
+  operations: {UpdateUserBookRead: 'UPDATE', AddUserBookRead: 'ADD', UpdateUserBook: 'UPDATE_BOOK'},
 }));
 
 const ITEM: ReadingItem = {
@@ -205,18 +205,36 @@ test("an OAuth session is passed to the SDK as auth, not as a token", async () =
 });
 
 describe('saveReview', () => {
-  test('sends only review fields, with the rating when given', async () => {
-    mockSdk.library.update = jest.fn().mockResolvedValue({});
-    await saveReview('T', 7, {markdown: ' great ', hasSpoilers: true, rating: 4.5});
-    expect(mockSdk.library.update).toHaveBeenCalledWith(7, {rating: 4.5, review: {markdown: 'great', hasSpoilers: true}});
-    await saveReview('T', 7, {markdown: 'ok', hasSpoilers: false});
-    expect(mockSdk.library.update).toHaveBeenLastCalledWith(7, {review: {markdown: 'ok', hasSpoilers: false}});
+  const REVIEW = {markdown: ' great ', hasSpoilers: true, sponsored: false, notes: ' mine '};
+  test('one UpdateUserBook request with the review fields; sponsored only when set', async () => {
+    mockSdk.request.mockResolvedValue({});
+    await saveReview('T', 7, {...REVIEW, rating: 4.5});
+    expect(mockSdk.request).toHaveBeenLastCalledWith('UPDATE_BOOK', {
+      id: 7,
+      object: {rating: 4.5, review_markdown: 'great', review_has_spoilers: true, private_notes: 'mine'},
+    });
+    await saveReview('T', 7, {...REVIEW, sponsored: true});
+    expect(mockSdk.request.mock.calls.at(-1)![1].object).toEqual({review_markdown: 'great', review_has_spoilers: true, sponsored_review: true, private_notes: 'mine'});
   });
 
   test('empty text and bad ratings are refused before any request', async () => {
-    mockSdk.library.update = jest.fn();
-    await expect(saveReview('T', 7, {markdown: '  ', hasSpoilers: false})).rejects.toThrow(/empty/);
-    await expect(saveReview('T', 7, {markdown: 'x', hasSpoilers: false, rating: 4.3})).rejects.toThrow(/rating/);
-    expect(mockSdk.library.update).not.toHaveBeenCalled();
+    mockSdk.request.mockClear();
+    await expect(saveReview('T', 7, {...REVIEW, markdown: '  '})).rejects.toThrow(/empty/);
+    await expect(saveReview('T', 7, {...REVIEW, rating: 4.3})).rejects.toThrow(/rating/);
+    expect(mockSdk.request).not.toHaveBeenCalled();
+  });
+
+  test('fetchReview maps the entry for prefilling', async () => {
+    mockSdk.library.get = jest.fn().mockResolvedValue({reviewMarkdown: null, reviewHasSpoilers: true, privateNotes: 'n', rating: 3.5});
+    expect(await fetchReview('T', 7)).toEqual({markdown: '', hasSpoilers: true, notes: 'n', rating: 3.5});
   });
 });
+
+test("an OAuth session is passed to the SDK as auth, not as a token", async () => {
+  const session = {getAccessToken: async () => "hc_at_1"};
+  mockSdk.library.list = jest.fn().mockResolvedValue({items: [], hasMore: false});
+  await fetchUserBooks(session);
+  expect(mockSdk.options).toMatchObject({auth: session, pace: false, maxRetries: 0});
+  expect(mockSdk.options).not.toHaveProperty("token");
+});
+

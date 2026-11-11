@@ -1,6 +1,5 @@
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
-import {TextInput} from 'react-native';
 import ReviewPage from '../src/ui/ReviewPage';
 import {MOCK_BOOK} from '../src/ui/mockBook';
 
@@ -23,7 +22,8 @@ const render = (props: any = {}) => {
 };
 const all = (tree: any) => texts(tree.toJSON()).join('|');
 const press = (tree: any, label: string) => act(() => tree.root.findByProps({accessibilityLabel: label}).props.onPress());
-const type = (tree: any, v: string) => act(() => tree.root.findByType(TextInput).props.onChangeText(v));
+const field = (tree: any, label: string) => tree.root.findByProps({accessibilityLabel: label});
+const type = (tree: any, v: string, label = 'Review') => act(() => field(tree, label).props.onChangeText(v));
 const save = async (tree: any) => {
   await act(async () => {
     await tree.root.findByProps({accessibilityLabel: 'Save'}).props.onPress();
@@ -43,9 +43,11 @@ test('saves text, half-step rating and spoilers flag, then shows the saved state
   press(t, 'Raise rating');
   press(t, 'Raise rating');
   expect(all(t)).toContain('★ 1.5 / 5');
-  act(() => t.root.findByProps({accessibilityRole: 'checkbox'}).props.onPress());
+  act(() => field(t, 'This review contains spoilers').props.onPress());
+  act(() => field(t, 'Sponsored or ARC review').props.onPress());
+  type(t, ' for me ', 'Private notes');
   await save(t);
-  expect(onSave).toHaveBeenCalledWith({markdown: 'Loved it', hasSpoilers: true, rating: 1.5});
+  expect(onSave).toHaveBeenCalledWith({markdown: 'Loved it', hasSpoilers: true, sponsored: true, notes: 'for me', rating: 1.5});
   expect(all(t)).toContain('✓ Review saved');
 });
 
@@ -57,7 +59,15 @@ test('no rating is left out; lowering below 0.5 clears it', async () => {
   expect(all(t)).toContain('No rating');
   type(t, 'fine');
   await save(t);
-  expect(onSave).toHaveBeenCalledWith({markdown: 'fine', hasSpoilers: false});
+  expect(onSave).toHaveBeenCalledWith({markdown: 'fine', hasSpoilers: false, sponsored: false, notes: ''});
+});
+
+test('starts from what the entry already holds', async () => {
+  const onSave = jest.fn().mockResolvedValue(undefined);
+  const t = render({onSave, initial: {markdown: 'old', hasSpoilers: true, sponsored: false, notes: 'n', rating: 3}});
+  expect(all(t)).toContain('★ 3 / 5');
+  await save(t);
+  expect(onSave).toHaveBeenCalledWith({markdown: 'old', hasSpoilers: true, sponsored: false, notes: 'n', rating: 3});
 });
 
 test('a failed save shows the error and Retry, and retrying works', async () => {
