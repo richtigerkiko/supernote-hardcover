@@ -6,7 +6,9 @@ import App from '../App';
 import {name as appName} from '../app.json';
 
 import {PluginManager, PluginCommAPI, PluginDocAPI, NativeUIUtils} from 'sn-plugin-lib';
-import TOKEN from './token.generated'; // written from the workspace .env by scripts/write-token.js
+import {OAuthSession, SignedOutError, type TokenSet} from '@hardcover/sdk/oauth';
+import CLIENT_ID from './clientId.generated'; // written from the workspace .env by scripts/write-client-id.js
+import {fileTokenStore, SCOPES} from './auth';
 import {parseEpub} from './epub';
 import {isbnsIn} from './match';
 import {buildDetail, STATUS_ID, withEdition} from './detail';
@@ -101,19 +103,39 @@ const memMeta = new Map<string, FileMeta>(); // path -> metadata in memory (also
 // ---- persistence (native module). Tracking never depends on it: with no module or a failing call, everything below
 // quietly falls back to memory. The EPUB metadata cache lives in the plugin's private directory (no permission needed,
 // regenerable); a cached entry is valid only while the file keeps its size (see src/store.ts).
+const privateDir = async () => {
+  try {
+    return await PluginManager.getPluginDirPath();
+  } catch {
+    return null; // no private dir: memory only
+  }
+};
 let persistentMeta: Promise<ReturnType<typeof createMetaCache>> | null = null;
 function persistentMetaCache() {
   persistentMeta = persistentMeta || (async () => {
-    let dir: string | null | undefined = null;
-    try {
-      dir = await PluginManager.getPluginDirPath();
-    } catch {
-      /* no private dir: memory only */
-    }
+    const dir = await privateDir();
     return createMetaCache(createJsonFile(native && dir ? native : null, `${dir}/meta-cache.json`), p => native!.stat(p));
   })();
   return persistentMeta;
 }
+
+// ---- sign-in: OAuth device grant. Public client (the id is all the package holds); the session keeps the tokens in
+// tokens.json in the private directory, refreshes from the next call after expiry (no timer) and replays a 401 once. ----
+let tokenOk = !DEBUG_GESTURES; // false after the sign-in was lost: tracking stops until the page signs in again
+let tokenFile: ReturnType<typeof createJsonFile<Partial<TokenSet>>> | null = null;
+const oauth = new OAuthSession({
+  clientId: CLIENT_ID,
+  store: fileTokenStore(async () => {
+    if (!tokenFile) {
+      const dir = await privateDir();
+      tokenFile = createJsonFile<Partial<TokenSet>>(native && dir ? native : null, `${dir}/tokens.json`);
+    }
+    return tokenFile;
+  }),
+  onSignedOut: () => {
+    tokenOk = false;
+  },
+});
 async function metaFor(path: string): Promise<FileMeta> {
   let meta = memMeta.get(path);
   if (meta) return meta;
@@ -157,13 +179,13 @@ function dropReadingList() {
 async function readingList() {
   if (Date.now() - reading.at <= READING_TTL_MS) return reading.list;
   const gen = readingGen;
-  const list = await fetchUserBooks(TOKEN);
+  const list = await fetchUserBooks(oauth);
   if (gen === readingGen) reading = {list, at: Date.now()};
   return list;
 }
 async function resolvePath(path: string) {
   const meta = await metaFor(path);
-  const item = await resolveBook({meta, reading: await readingList(), bookIdsForIsbns: isbns => bookIdsForIsbns(TOKEN, isbns)});
+  const item = await resolveBook({meta, reading: await readingList(), bookIdsForIsbns: isbns => bookIdsForIsbns(oauth, isbns)});
   return withEdition(item, meta.edition); // the edition the reader picked for this file, if any
 }
 
@@ -182,7 +204,7 @@ async function libraryItem(bookId: number) {
 async function addToLibrary(path: string, meta: FileMeta, link: {bookId: number; editionId?: number}) {
   let item = await libraryItem(link.bookId);
   if (!item) {
-    const ed = await withTimeout(addOwned(TOKEN, link.bookId, link.editionId), 20_000, 'add to library');
+    const ed = await withTimeout(addOwned(oauth, link.bookId, link.editionId), 20_000, 'add to library');
     if (ed.pages && !meta.edition) meta.edition = {id: ed.id, pages: ed.pages};
     item = await libraryItem(link.bookId);
   }
@@ -201,7 +223,7 @@ async function linkFromCatalogue(path: string): Promise<ReadingItem | null> {
   let link = meta.linked;
   if (!link) {
     const found = await withTimeout(
-      catalogueBook({meta, editionsForIsbns: i => editionsForIsbns(TOKEN, i), searchBooks: t => searchBooks(TOKEN, t)}),
+      catalogueBook({meta, editionsForIsbns: i => editionsForIsbns(oauth, i), searchBooks: t => searchBooks(oauth, t)}),
       20_000,
       'catalogue search',
     );
@@ -209,7 +231,7 @@ async function linkFromCatalogue(path: string): Promise<ReadingItem | null> {
     link = found;
     const existing = await libraryItem(link.bookId);
     if (existing) return withEdition(existing, meta.edition); // it was on the shelves after all: nothing to ask or write
-    const book = await withTimeout(fetchBookDetail(TOKEN, link.bookId), 20_000, 'book details');
+    const book = await withTimeout(fetchBookDetail(oauth, link.bookId), 20_000, 'book details');
     const yes = await dialog(`"${book.title}" is not in your Hardcover library. Add it as Want to Read and mark your copy as owned?`, 'No', 'Yes', false);
     if (yes) return addToLibrary(path, meta, link);
     meta.linked = link;
@@ -230,7 +252,7 @@ const tracker = createTracker({
     await needGranted();
     log('push', item.title, pages);
     const hadRead = !!item.read;
-    await saveProgress(TOKEN, item, pages).catch(e => {
+    await saveProgress(oauth, item, pages).catch(e => {
       grantedFlag = false; // maybe the grant is gone: the next touch asks hasPermission again
       throw e;
     });
@@ -257,7 +279,6 @@ async function sample(): Promise<Sample | null> {
 const safeSample = () => withTimeout(sample(), 8_000, 'reader state').catch(() => null);
 
 // ---- tracking: per document, OFF by default (the page's toggle turns it on for the open book), driven by touches ----
-let tokenOk = !DEBUG_GESTURES; // a rejected token (401) stops all tracking until the plugin restarts
 let sampling = 0; // wall-clock start of the running touch handler, 0 when idle
 
 function onTouch() {
@@ -297,11 +318,13 @@ PluginManager.registerMotionListener(1, {
   },
 });
 
-// A rejected token will not fix itself: stop instead of retrying on every touch.
+// A lost sign-in (or a 401 the refresh could not fix) will not mend itself: stop instead of retrying on every touch.
+// Signing in on the page turns tracking back on.
 function stopIfTokenRejected() {
-  if (tokenOk && tracker.state.lastError?.status === 401) {
+  const e = tracker.state.lastError;
+  if (tokenOk && (e?.status === 401 || e instanceof SignedOutError)) {
     tokenOk = false;
-    log('token rejected: tracking stopped');
+    log('signed out: tracking stopped');
   }
 }
 
@@ -310,19 +333,22 @@ let current: {path: string; item: ReadingItem; detail: PageBook; sample: Sample;
 // One line for the page: why tracking is not working, or the last push. lastPush and lastError are shared by all books,
 // so they show only for the file that is open.
 const syncNote = (path: string): string => {
-  if (!tokenOk) return 'Token rejected, tracking stopped';
+  if (!tokenOk) return 'Signed out, tracking stopped';
   const {lastError: e, lastPush: p} = tracker.state;
   if (e?.path === path) return e.message;
   return p?.path === path ? `Last sync: page ${p.pages}` : '';
 };
+let signInAbort: AbortController | null = null; // the sign-in that is waiting for its approval, if any
 let loadSeq = 0; // a slow load must not overwrite `current` after a newer one
 const dialogOk = (tip: string) => dialog(tip, 'OK', 'Close', false).catch(() => {});
 const api: SessionApi = {
   // -> {book} for DetailPage, or {message} when there is nothing to show
   async load() {
+    signInAbort?.abort(); // a reload (the button pressed again) drops a waiting sign-in: its code is no longer on screen
     const mine = ++loadSeq;
     const s = await (session.pending ?? safeSample());
     session.pending = null;
+    if (!(await oauth.isSignedIn())) return {message: 'Sign in to Hardcover to sync your reading.', signIn: true};
     if (!s) return {message: 'Open an EPUB in a document to see its Hardcover page.'};
     if (memMeta.get(s.path)?.failed) memMeta.delete(s.path); // a button press tries a failed read again
     await needPermissions();
@@ -334,12 +360,35 @@ const api: SessionApi = {
     // resolvePath applied the saved edition to item, so the reading entry's own edition comes from the cached list
     const entry = reading.list.find(r => r.userBookId === item.userBookId);
     const editionIds = [...new Set([entry?.editionId, meta.edition?.id].filter((id): id is number => !!id))];
-    const book = await withTimeout(fetchBookDetail(TOKEN, item.bookId, editionIds), 20_000, 'book details');
+    const book = await withTimeout(fetchBookDetail(oauth, item.bookId, editionIds), 20_000, 'book details');
     const detail = buildDetail({book, item, saved: meta.edition, sample: s, isbns: isbnsIn((meta.ids ?? []).join(' '))});
     if (!detail.editions.some(e => e.pages > 0)) return {message: 'Hardcover has no edition with a page count for this book.'};
     if (mine === loadSeq) current = {path: s.path, item, detail, sample: s, editionId: detail.editionId};
     if (!detail.inLibrary) return {book: detail, tracking: false, sync: 'Not in your library: tracking and status are off.'};
     return {book: detail, tracking: meta.tracking === true, sync: syncNote(s.path)};
+  },
+  // Device grant (RFC 8628): onCode shows the page where to type the code. Resolves true once the account approved it,
+  // false when the attempt was cancelled (see signInAbort).
+  async signIn(onCode) {
+    await needPermissions();
+    signInAbort?.abort();
+    const mine = (signInAbort = new AbortController());
+    try {
+      await oauth.signInWithDevice({
+        scopes: SCOPES,
+        signal: mine.signal,
+        onCode: d => onCode(d.verificationUri, d.userCode, d.verificationUriComplete ?? d.verificationUri),
+      });
+    } catch (e) {
+      if (mine.signal.aborted) return false;
+      throw e;
+    } finally {
+      if (signInAbort === mine) signInAbort = null;
+    }
+    tokenOk = !DEBUG_GESTURES;
+    dropReadingList();
+    log('signed in');
+    return true;
   },
   // The linked book (not in the library) is added now: Want to Read, edition marked as owned. The page reloads after.
   async addToLibrary() {
@@ -385,7 +434,7 @@ const api: SessionApi = {
     if (!c || !entry) throw new Error('Nothing to save.');
     await needPermissions();
     const position = ed ? journalPosition(c.sample.page, c.sample.total, ed.pages) : null;
-    await saveJournal(TOKEN, {bookId: c.item.bookId, editionId: ed ? Number(ed.id) : null, event, entry, position: position ?? undefined, privacy});
+    await saveJournal(oauth, {bookId: c.item.bookId, editionId: ed ? Number(ed.id) : null, event, entry, position: position ?? undefined, privacy});
     log('journal', event, 'saved for', c.item.title);
   },
   async setStatus(label) {
@@ -393,7 +442,7 @@ const api: SessionApi = {
     if (!c) throw new Error('no book loaded');
     if (!c.item.userBookId) throw new Error('add the book to your library first');
     await needPermissions();
-    await setStatus(TOKEN, c.item.userBookId, STATUS_ID[label as keyof typeof STATUS_ID]);
+    await setStatus(oauth, c.item.userBookId, STATUS_ID[label as keyof typeof STATUS_ID]);
     dropReadingList(); // the list is fetched again so the new status shows
     tracker.forget(c.path);
   },

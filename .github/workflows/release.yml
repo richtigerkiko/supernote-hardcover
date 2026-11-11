@@ -24,12 +24,11 @@ jobs:
           key: android-sdk-35-ndk-27.1.12297006
       - name: Install Android platform, build-tools and NDK
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0" "ndk;27.1.12297006"
-      # The token is bundled into the .snplg: the release is for the owner only, so the repo must stay private.
       - name: Build
         env:
-          HARDCOVER_KEY: ${{ secrets.HARDCOVER_KEY }}
+          HARDCOVER_OAUTH_CLIENT_ID: ${{ secrets.HARDCOVER_OAUTH_CLIENT_ID }}
         run: |
-          node scripts/write-token.js
+          node scripts/write-client-id.js
           bash buildPlugin.sh
       - name: Publish release
         env:

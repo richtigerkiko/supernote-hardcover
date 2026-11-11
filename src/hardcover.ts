@@ -5,18 +5,21 @@ import {
   operations,
   type Book,
   type Edition,
+  type TokenSource,
   type UserBookStatus,
 } from '@hardcover/sdk';
 
-// One client per token. pace: false because the SDK would wait with setTimeout, which the host only runs in
-// lifecycle state 2 (see CLAUDE.md); maxRetries 0 because the tracker owns retries (RETRY_MS, RATE_LIMIT_RETRY_MS).
-// SDK errors carry `status`, which the 401 stop and the 429 retry branch on.
+// One client per credential. `auth` is a plain token (tests) or an OAuth session that refreshes itself and replays a
+// 401 once. pace: false because the SDK would wait with setTimeout, which the host only runs in lifecycle state 2 (see
+// CLAUDE.md); maxRetries 0 because the tracker owns retries (RETRY_MS, RATE_LIMIT_RETRY_MS). SDK errors carry `status`,
+// which the 429 retry branch and the 401 stop use; a lost sign-in is a SignedOutError.
+export type Auth = string | TokenSource;
 let client: HardcoverClient | undefined;
-let clientToken: string | undefined;
-function sdk(token: string): HardcoverClient {
-  if (!client || clientToken !== token) {
-    client = new HardcoverClient({token, pace: false, maxRetries: 0, onWarning: () => {}});
-    clientToken = token;
+let clientAuth: Auth | undefined;
+function sdk(auth: Auth): HardcoverClient {
+  if (!client || clientAuth !== auth) {
+    client = new HardcoverClient({...(typeof auth === 'string' ? {token: auth} : {auth}), pace: false, maxRetries: 0, onWarning: () => {}});
+    clientAuth = auth;
   }
   return client;
 }
@@ -45,8 +48,8 @@ export interface ReadingItem {
 const LIBRARY_PAGE = 100;
 
 // Every book on the reader's shelves (any status).
-export async function fetchUserBooks(token: string): Promise<ReadingItem[]> {
-  const c = sdk(token);
+export async function fetchUserBooks(auth: Auth): Promise<ReadingItem[]> {
+  const c = sdk(auth);
   const items: ReadingItem[] = [];
   for (let offset = 0; ; offset += LIBRARY_PAGE) {
     const page = await c.library.list({limit: LIBRARY_PAGE, offset});
@@ -82,10 +85,10 @@ export interface JournalInput {
   privacy?: PrivacySetting;
 }
 
-export async function saveJournal(token: string, {bookId, editionId, event, entry, position, privacy = PRIVACY_PRIVATE}: JournalInput): Promise<number> {
+export async function saveJournal(auth: Auth, {bookId, editionId, event, entry, position, privacy = PRIVACY_PRIVATE}: JournalInput): Promise<number> {
   if (event !== JournalEvent.Quote && event !== JournalEvent.Note) throw new Error(`refusing to save: unknown journal event ${event}`);
   if (!entry || !entry.trim()) throw new Error('refusing to save an empty journal entry');
-  const saved = await sdk(token).journal.add(bookId, {
+  const saved = await sdk(auth).journal.add(bookId, {
     event,
     entry,
     privacy,
@@ -96,8 +99,8 @@ export async function saveJournal(token: string, {bookId, editionId, event, entr
 }
 
 // Which books do these ISBN-13s belong to? Different editions of one book share a book_id.
-export async function bookIdsForIsbns(token: string, isbns: string[]): Promise<number[]> {
-  const editions = await sdk(token).books.findByIsbn(isbns);
+export async function bookIdsForIsbns(auth: Auth, isbns: string[]): Promise<number[]> {
+  const editions = await sdk(auth).books.findByIsbn(isbns);
   return [...new Set(editions.map(e => e.bookId))];
 }
 
@@ -125,9 +128,9 @@ export const localDate = (d: Date): string =>
 
 // shortcut: reads.setProgress is not used. It takes no edition_id or dates, and throws when the book has no read in
 // progress, while this plugin also tracks books outside Currently Reading. Typed operations keep the exact write.
-export async function saveProgress(token: string, item: ReadingItem, pages: number): Promise<void> {
+export async function saveProgress(auth: Auth, item: ReadingItem, pages: number): Promise<void> {
   if (!(pages > 0)) throw new Error('refusing to save: no page count');
-  const c = sdk(token);
+  const c = sdk(auth);
   const input = progressInput(item, pages);
   if (item.read) {
     await c.request(operations.UpdateUserBookRead, {id: item.read.id, read: input});
@@ -146,8 +149,8 @@ export async function saveProgress(token: string, item: ReadingItem, pages: numb
 export type BookDetail = Book & {editions: Edition[]};
 const EDITIONS_SHOWN = 100;
 
-export async function fetchBookDetail(token: string, bookId: number, editionIds: number[] = []): Promise<BookDetail> {
-  const c = sdk(token);
+export async function fetchBookDetail(auth: Auth, bookId: number, editionIds: number[] = []): Promise<BookDetail> {
+  const c = sdk(auth);
   const [book, listed] = await Promise.all([c.books.get(bookId), c.books.editions(bookId, {limit: EDITIONS_SHOWN})]);
   if (!book) throw new Error(`Hardcover: book ${bookId} not found`);
   const editions = listed.items;
@@ -156,8 +159,8 @@ export async function fetchBookDetail(token: string, bookId: number, editionIds:
   return {...book, editions: [...editions, ...mine.filter((e): e is NonNullable<typeof e> => !!e)]};
 }
 
-export async function setStatus(token: string, userBookId: number, statusId: UserBookStatus): Promise<void> {
-  await sdk(token).library.setStatus(userBookId, statusId);
+export async function setStatus(auth: Auth, userBookId: number, statusId: UserBookStatus): Promise<void> {
+  await sdk(auth).library.setStatus(userBookId, statusId);
 }
 
 // ---- the whole catalogue (for a book that is not in the library yet) ----
@@ -168,12 +171,12 @@ export interface CatalogueBook {
 }
 
 // Editions with these ISBN-13s anywhere on Hardcover.
-export async function editionsForIsbns(token: string, isbns: string[]): Promise<{id: number; bookId: number}[]> {
-  return (await sdk(token).books.findByIsbn(isbns)).map(e => ({id: e.id, bookId: e.bookId}));
+export async function editionsForIsbns(auth: Auth, isbns: string[]): Promise<{id: number; bookId: number}[]> {
+  return (await sdk(auth).books.findByIsbn(isbns)).map(e => ({id: e.id, bookId: e.bookId}));
 }
 
-export async function searchBooks(token: string, query: string): Promise<CatalogueBook[]> {
-  const {hits} = await sdk(token).search.books(query, {perPage: 10});
+export async function searchBooks(auth: Auth, query: string): Promise<CatalogueBook[]> {
+  const {hits} = await sdk(auth).search.books(query, {perPage: 10});
   return hits.map(h => ({bookId: h.id, title: h.title, authors: h.authorNames ?? []}));
 }
 
@@ -182,8 +185,8 @@ export async function searchBooks(token: string, query: string): Promise<Catalog
 // (checked 2026-11-10), so this is only called for a book with no entry yet. `imported` keeps it out of followers' feeds.
 // The edition is also put on the new entry, and returned so the caller can use its page count for this file.
 // shortcut: with no ISBN match the owned edition is the first one with a page count, else the first; upgrade if it matters.
-export async function addOwned(token: string, bookId: number, editionId?: number): Promise<{id: number; pages: number | null}> {
-  const c = sdk(token);
+export async function addOwned(auth: Auth, bookId: number, editionId?: number): Promise<{id: number; pages: number | null}> {
+  const c = sdk(auth);
   const listed = editionId ? [] : (await c.books.editions(bookId, {limit: EDITIONS_SHOWN})).items;
   const edition = editionId ? await c.books.edition(editionId) : (listed.find(e => (e.pages ?? 0) > 0) ?? listed[0]);
   // Nothing to own means nothing is written: an unowned entry would never be retried, it is found in the library next time.
