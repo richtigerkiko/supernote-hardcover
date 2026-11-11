@@ -175,6 +175,7 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
         <Pressable accessibilityRole="button" accessibilityLabel="Close" style={styles.close} onPress={onClose}>
           <Text style={styles.closeText}>✕</Text>
         </Pressable>
+        <Image accessibilityLabel="Hardcover" source={require('../../assets/logo.png')} style={styles.logo} />
         {inLibrary ? (
           <View style={styles.trackingBox}>
             <Text style={styles.trackingLabel}>Tracking is</Text>
@@ -275,6 +276,7 @@ const styles = StyleSheet.create({
   page: {flex: 1, backgroundColor: WHITE},
   topBar: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 20, paddingRight: 64, height: 68, borderBottomWidth: 2, borderColor: BLACK}, // right gap: the host's floating home button sits there
   close: {width: 56, height: 56, alignItems: 'center', justifyContent: 'center'},
+  logo: {width: 120, height: 26, resizeMode: 'contain'},
   closeText: {fontSize: 28, color: BLACK},
   trackingBox: {flexDirection: 'row', alignItems: 'center'},
   trackingLabel: {fontSize: 20, color: BLACK, marginRight: 12},

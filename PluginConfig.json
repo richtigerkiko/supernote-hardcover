@@ -1,16 +1,16 @@
-﻿{
+{
     "pluginID":  "fy7xif74l3rkpo1x",
     "pluginKey":  "HardcoverSync",
-    "iconPath":  "",
+    "iconPath":  "assets/plugin-icon.png",
     "desc":  "",
     "name":  "HardcoverSync",
-    "versionCode":  "28",
+    "versionCode":  "29",
     "uses-permissions":  [
                              "plugin.permission.FILE:READ",
                              "plugin.permission.FILE:WRITE",
                              "plugin.permission.INTERNET"
                          ],
-    "versionName":  "0.2.0",
+    "versionName":  "0.2.1",
     "jsMainPath":  "index"
 }
 

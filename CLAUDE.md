@@ -47,7 +47,9 @@ npm run build          # writes src/clientId.generated.js from ../../.env (HARDC
 
 Push from Git Bash with `MSYS_NO_PATHCONV=1` (it rewrites `/storage/...` paths), or from PowerShell: `adb -s SN078E10048537 push build\outputs\HardcoverSync.snplg /storage/emulated/0/MyStyle/HardcoverSync.snplg`. The first native build took 46 s here (Gradle was cached); the package is about 7 MB (a 6.9 MB `app.npk` plus the 1.1 MB bundle).
 
-Install with Settings > Apps > Plugins > Add Plugin (not "reinstall"). Bump `versionCode` (and `versionName`/`package.json` together) every install (28 in `PluginConfig.json` now; the installer refuses a lower or equal code with "This plugin version is too low"). The branch is `master`. The package is megabytes because of the native module; if you ever go back to JS-only, delete `build/` first or a stale `app.npk` is zipped into it silently. `src/clientId.generated.js` and `build/` are gitignored. The emulator is usually running too, so always `adb -s <serial>`.
+Install with Settings > Apps > Plugins > Add Plugin (not "reinstall"). Bump `versionCode` (and `versionName`/`package.json` together) every install (29 in `PluginConfig.json` now; the installer refuses a lower or equal code with "This plugin version is too low"). The branch is `master`. The package is megabytes because of the native module; if you ever go back to JS-only, delete `build/` first or a stale `app.npk` is zipped into it silently. `src/clientId.generated.js` and `build/` are gitignored. The emulator is usually running too, so always `adb -s <serial>`.
+
+Branding assets in `assets/` come from the Hardcover press kit (hardcover.app/pages/about): `icon.png` (toolbar buttons, from `logo-line-black.png`, 48x48), `plugin-icon.png` (`iconPath`, from `App Icon.png`, 192x192), `logo.png` (detail page top bar, from `Hardcover OneColor Dark.png`). Not yet checked on the emulator or the Nomad.
 
 ## Detail page and emulator preview
 
