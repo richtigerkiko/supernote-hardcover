@@ -164,21 +164,6 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
     );
   }
 
-  if (view === 'cover' && book.cover) {
-    return (
-      <View style={styles.page}>
-        <View style={styles.topBar}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close cover" style={styles.close} onPress={() => setView('detail')}>
-            <Text style={styles.closeText}>✕</Text>
-          </Pressable>
-        </View>
-        <Pressable accessibilityLabel="Cover full size" style={styles.coverFull} onPress={() => setView('detail')}>
-          <Image source={{uri: book.cover}} style={styles.coverFullImg} resizeMode="contain" />
-        </Pressable>
-      </View>
-    );
-  }
-
   if (view === 'editions') {
     return <EditionPicker editions={book.editions} editionId={book.editionId} onPick={onSetEdition} onClose={() => setView('detail')} />;
   }
@@ -281,6 +266,18 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
           <Text style={styles.actionText}>Write review</Text>
         </Pressable>
       </View>
+
+      {view === 'cover' && book.cover ? (
+        // overlay, not a sub-view: the page underneath stays mounted, so its scroll position survives
+        <Pressable accessibilityLabel="Cover full size" style={styles.coverFull} onPress={() => setView('detail')}>
+          <View style={styles.topBar}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close cover" style={styles.close} onPress={() => setView('detail')}>
+              <Text style={styles.closeText}>✕</Text>
+            </Pressable>
+          </View>
+          <Image source={{uri: book.cover}} style={styles.coverFullImg} resizeMode="contain" />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -308,8 +305,8 @@ const styles = StyleSheet.create({
   fill: {position: 'absolute', top: 0, bottom: 0, left: 0, overflow: 'hidden', backgroundColor: BLACK, justifyContent: 'center'},
   header: {flexDirection: 'row'},
   cover: {width: 190, height: 285, marginRight: 22, borderWidth: 2, borderColor: BLACK},
-  coverFull: {flex: 1, padding: 16},
-  coverFullImg: {width: '100%', height: '100%'},
+  coverFull: {...StyleSheet.absoluteFillObject, backgroundColor: WHITE},
+  coverFullImg: {flex: 1, margin: 16},
   noCover: {alignItems: 'center', justifyContent: 'center', padding: 12},
   noCoverText: {fontSize: 22, textAlign: 'center', color: BLACK},
   info: {flex: 1},

@@ -120,16 +120,17 @@ test('the sync note is shown above the progress when given, and absent otherwise
   expect(all(render({}))).not.toContain('Last sync');
 });
 
-test('tapping the cover opens it full size; closing returns to the page', () => {
+test('tapping the cover opens it full size over the page; closing (button or anywhere) removes it', () => {
   const tree = render({book: {...MOCK_BOOK, cover: 'https://x/c.jpg'}});
+  const open = () => tree.root.findAllByProps({accessibilityLabel: 'Cover full size'}).length;
+  expect(open()).toBe(0);
   press(tree, 'Show cover full size');
-  expect(tree.root.findAllByProps({accessibilityLabel: 'Cover full size'}).length).toBeGreaterThan(0);
-  expect(all(tree)).not.toContain('Write review');
+  expect(open()).toBeGreaterThan(0);
   press(tree, 'Close cover');
-  expect(all(tree)).toContain('Write review');
+  expect(open()).toBe(0);
   press(tree, 'Show cover full size');
   act(() => tree.root.findAllByProps({accessibilityLabel: 'Cover full size'})[0].props.onPress());
-  expect(all(tree)).toContain('Write review');
+  expect(open()).toBe(0);
 });
 
 test('without a cover there is no cover button', () => {
