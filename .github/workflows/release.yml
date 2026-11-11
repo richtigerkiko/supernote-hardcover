@@ -1,7 +1,7 @@
 name: Release
 on:
   push:
-    branches: [master]
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: write
@@ -12,12 +12,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: npm }
-      - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: 17, cache: gradle }
-      - run: npm ci
-      - run: npx jest
       - name: Next version
         id: ver
         run: |
@@ -25,11 +19,23 @@ jobs:
           read -r v code <<< "$out" || true
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "code=$code" >> "$GITHUB_OUTPUT"
-          # CI working tree only, nothing is committed back (master is protected)
-          if [ -n "$v" ]; then
-            jq --arg v "$v" --argjson c "$code" '.versionName=$v | .versionCode=$c' PluginConfig.json > pc.tmp && mv pc.tmp PluginConfig.json
-            npm version "$v" --no-git-tag-version --allow-same-version
-          else echo "no releasing commits, skipping"; fi
+          [ -n "$v" ] || echo "no releasing commits (feat, fix, perf, breaking), skipping"
+      - if: steps.ver.outputs.version != ''
+        uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - if: steps.ver.outputs.version != ''
+        uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17, cache: gradle }
+      - if: steps.ver.outputs.version != ''
+        run: npm ci
+      - if: steps.ver.outputs.version != ''
+        run: npx jest
+      - if: steps.ver.outputs.version != ''
+        name: Stamp version
+        run: |
+          # CI working tree only, nothing is committed back (main is protected)
+          jq --arg v "${{ steps.ver.outputs.version }}" --argjson c "${{ steps.ver.outputs.code }}" '.versionName=$v | .versionCode=$c' PluginConfig.json > pc.tmp && mv pc.tmp PluginConfig.json
+          npm version "${{ steps.ver.outputs.version }}" --no-git-tag-version --allow-same-version
       - if: steps.ver.outputs.version != ''
         uses: actions/cache@v4
         with:
@@ -55,6 +61,6 @@ jobs:
         run: |
           tag="v${{ steps.ver.outputs.version }}-${{ steps.ver.outputs.code }}"
           flags=""
-          # manual runs on any branch but master publish a pre-release for testers
-          if [ "$GITHUB_REF_NAME" != master ]; then tag="$tag-dev"; flags="--prerelease"; fi
+          # manual runs on any branch but main publish a pre-release for testers
+          if [ "$GITHUB_REF_NAME" != main ]; then tag="$tag-dev"; flags="--prerelease"; fi
           gh release create "$tag" build/outputs/HardcoverSync.snplg --target "$GITHUB_SHA" --generate-notes $flags

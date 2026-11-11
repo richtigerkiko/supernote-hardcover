@@ -2,11 +2,12 @@ const { bumpOf, nextVersion, latestTag } = require('../scripts/next-version');
 
 test('bumpOf', () => {
   expect(bumpOf('fix(sync): x')).toBe('patch');
+  expect(bumpOf('perf(sync): x')).toBe('patch');
   expect(bumpOf('feat: x')).toBe('minor');
   expect(bumpOf('feat(ui)!: x')).toBe('major');
   expect(bumpOf('fix!: x')).toBe('major');
   expect(bumpOf('fix: x\n\nBREAKING CHANGE: gone')).toBe('major');
-  for (const t of ['docs', 'chore', 'ci', 'perf', 'refactor', 'test']) expect(bumpOf(`${t}: x`)).toBeNull();
+  for (const t of ['docs', 'chore', 'ci', 'refactor', 'test']) expect(bumpOf(`${t}: x`)).toBeNull();
   expect(bumpOf('not conventional')).toBeNull();
 });
 
