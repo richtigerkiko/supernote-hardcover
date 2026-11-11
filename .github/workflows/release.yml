@@ -9,31 +9,46 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: actions/setup-node@v4
         with: { node-version: 20, cache: npm }
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17, cache: gradle }
       - run: npm ci
       - run: npx jest
-      - uses: actions/cache@v4
+      - name: Next version
+        id: ver
+        run: |
+          read -r v code < <(node scripts/next-version.js) || true
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          # CI working tree only, nothing is committed back (master is protected)
+          if [ -n "$v" ]; then
+            jq --arg v "$v" --argjson c "$code" '.versionName=$v | .versionCode=$c' PluginConfig.json > pc.tmp && mv pc.tmp PluginConfig.json
+            npm version "$v" --no-git-tag-version --allow-same-version
+          else echo "no releasing commits, skipping"; fi
+      - if: steps.ver.outputs.version != ''
+        uses: actions/cache@v4
         with:
           path: |
             /usr/local/lib/android/sdk/ndk/27.1.12297006
             /usr/local/lib/android/sdk/build-tools/35.0.0
             /usr/local/lib/android/sdk/platforms/android-35
           key: android-sdk-35-ndk-27.1.12297006
-      - name: Install Android platform, build-tools and NDK
+      - if: steps.ver.outputs.version != ''
+        name: Install Android platform, build-tools and NDK
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0" "ndk;27.1.12297006"
-      - name: Build
+      - if: steps.ver.outputs.version != ''
+        name: Build
         env:
           HARDCOVER_OAUTH_CLIENT_ID: ${{ secrets.HARDCOVER_OAUTH_CLIENT_ID }}
         run: |
           node scripts/write-client-id.js
           bash scripts/buildPlugin.sh
-      - name: Publish release
+      - if: steps.ver.outputs.version != ''
+        name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="v$(jq -r .versionName PluginConfig.json)-$(jq -r .versionCode PluginConfig.json)"
-          if gh release view "$tag" >/dev/null 2>&1; then echo "$tag already released (bump versionCode)"; exit 0; fi
+          tag="v${{ steps.ver.outputs.version }}-${{ steps.ver.outputs.code }}"
           gh release create "$tag" build/outputs/HardcoverSync.snplg --target "$GITHUB_SHA" --generate-notes
