@@ -4,13 +4,13 @@
     "iconPath":  "assets/plugin-icon.png",
     "desc":  "",
     "name":  "HardcoverSync",
-    "versionCode":  "29",
+    "versionCode":  "30",
     "uses-permissions":  [
                              "plugin.permission.FILE:READ",
                              "plugin.permission.FILE:WRITE",
                              "plugin.permission.INTERNET"
                          ],
-    "versionName":  "0.2.1",
+    "versionName":  "0.2.2",
     "jsMainPath":  "index"
 }
 
