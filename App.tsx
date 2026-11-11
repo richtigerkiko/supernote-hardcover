@@ -12,7 +12,7 @@ import {PluginManager} from 'sn-plugin-lib';
 import DetailPage, {BookDetail} from './src/ui/DetailPage';
 import QrCode from './src/ui/QrCode';
 import JournalPage from './src/ui/JournalPage';
-import {MOCK_BOOK, MOCK_LONG} from './src/ui/mockBook';
+import {MOCK_BOOK, MOCK_LONG, MOCK_REVIEWS} from './src/ui/mockBook';
 import {session} from './src/session';
 
 // The fake SDK reports this plugin name; the real host reports the real one.
@@ -115,6 +115,7 @@ export default function App(): React.JSX.Element {
         onToggleTracking={() => setTracking(!tracking)}
         onClose={() => setJournal({passage: 'Call me Ishmael. Some years ago, never mind how long precisely, having little or no money in my purse, I thought I would sail about a little and see the watery part of the world.'})}
         onWriteReview={() => setLong(l => !l)}
+        onLoadReviews={() => Promise.resolve({reviews: MOCK_REVIEWS, hasMore: false})}
         onSetStatus={status => setBook({...(book ?? MOCK_BOOK), status})}
         onSetEdition={editionId => setBook({...(book ?? MOCK_BOOK), editionId, editionSaved: true})}
       />
@@ -166,6 +167,7 @@ ${code}`);
       onToggleTracking={toggle}
       onClose={close}
       onWriteReview={() => session.api?.writeReview()}
+      onLoadReviews={offset => session.api!.loadReviews(offset)}
       onSetStatus={status => {
         const before = book.status;
         setBook({...book, status});

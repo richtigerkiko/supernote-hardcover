@@ -1,4 +1,5 @@
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
+import type {Review} from '../hardcover'; // type only: this file stays SDK-free at runtime
 import {Image, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import EditionPicker, {Item, TopBar} from './EditionPicker';
 
@@ -25,7 +26,6 @@ export type BookDetail = {
   cover?: string | null;
   rating?: number | null; // 0-5
   ratingsCount?: number;
-  reviewsCount?: number;
   inLibrary?: boolean; // false: not on the reader's shelves, so no status and no tracking, only an Add to library button
   status: string; // one of STATUSES
   progress: number; // reading position, 0-1 of the book; the page shown follows the chosen edition
@@ -51,6 +51,7 @@ type Props = {
   onSetStatus: (status: string) => void;
   onSetEdition: (editionId: string) => void;
   onAddToLibrary?: () => void; // only used when book.inLibrary is false
+  onLoadReviews?: (offset: number) => Promise<{reviews: Review[]; hasMore: boolean}>; // 10 at a time, first call on first open of the Reviews tab
 };
 
 const stars = (rating: number) => {
@@ -58,7 +59,10 @@ const stars = (rating: number) => {
   return '★'.repeat(full) + '☆'.repeat(5 - full);
 };
 
-const join = (parts: (string | number | null | undefined)[]) => parts.filter(Boolean).join(' · ');
+// Half stars: 4.5 -> ★★★★½☆
+const halfStars = (rating: number) => '★'.repeat(Math.floor(rating)) + (rating % 1 >= 0.5 ? '½' : '') + '☆'.repeat(5 - Math.ceil(rating - 0.25));
+
+const join =(parts: (string | number | null | undefined)[]) => parts.filter(Boolean).join(' · ');
 
 const CHIP_GAP = 6;
 const PILL_WIDTH = 52; // "+99" at 18 sp, border and padding included
@@ -137,11 +141,82 @@ function Progress({page, total}: {page: number; total: number}) {
   );
 }
 
-export default function DetailPage({book, tracking, syncNote, onToggleTracking, onClose, onWriteReview, onSetStatus, onSetEdition, onAddToLibrary}: Props) {
+function Pill({text}: {text: string}) {
+  return (
+    <View style={styles.pill}>
+      <Text style={styles.pillText}>{text}</Text>
+    </View>
+  );
+}
+
+// Name, Supporter pill and stars on line one; date and spoiler pill on line two (shared by the list and the full view).
+function ReviewHead({r}: {r: Review}) {
+  return (
+    <>
+      <View style={styles.rvLine}>
+        <Text style={styles.rvName} numberOfLines={1}>
+          {r.user}
+        </Text>
+        {r.supporter ? <Pill text="Supporter" /> : null}
+        {r.rating ? <Text style={styles.rvStars}>{halfStars(r.rating)}</Text> : null}
+      </View>
+      <View style={styles.rvLine}>
+        <Text style={styles.rvDate}>{r.date}</Text>
+        {r.spoiler ? <Pill text="Contains spoilers" /> : null}
+      </View>
+    </>
+  );
+}
+
+function ReviewEntry({r, onMore}: {r: Review; onMore: () => void}) {
+  const [long, setLong] = useState(false);
+  return (
+    <View style={styles.rv}>
+      <ReviewHead r={r} />
+      {r.spoiler ? null : (
+        <Text style={styles.rvText} numberOfLines={2} onTextLayout={e => setLong(e.nativeEvent.lines.length > 2)}>
+          {r.text}
+        </Text>
+      )}
+      {r.spoiler || long ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={`More of ${r.user}'s review`} style={styles.more} onPress={onMore}>
+          <Text style={styles.moreText}>More</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+type Reviews = {items: Review[]; hasMore: boolean; loaded: boolean; state: 'idle' | 'loading' | 'error'};
+const NO_REVIEWS: Reviews = {items: [], hasMore: false, loaded: false, state: 'idle'};
+
+export default function DetailPage({book, tracking, syncNote, onToggleTracking, onClose, onWriteReview, onSetStatus, onSetEdition, onAddToLibrary, onLoadReviews}: Props) {
   const inLibrary = book.inLibrary !== false;
   const [view, setView] = useState<'detail' | 'status' | 'editions' | 'cover'>('detail');
   const [aboutOpen, setAboutOpen] = useState(false);
   const [aboutLong, setAboutLong] = useState(false);
+  const [tab, setTab] = useState<'about' | 'reviews'>('about');
+  const [rv, setRv] = useState<Reviews>(NO_REVIEWS);
+  const [openReview, setOpenReview] = useState<Review | null>(null);
+
+  useEffect(() => {
+    setTab('about'); // another book was loaded
+    setRv(NO_REVIEWS);
+    setOpenReview(null);
+  }, [book.title]);
+
+  const loadReviews = () => {
+    if (!onLoadReviews || rv.state === 'loading') return;
+    setRv(r => ({...r, state: 'loading'}));
+    onLoadReviews(rv.items.length).then(
+      p => setRv(r => ({items: [...r.items, ...p.reviews], hasMore: p.hasMore, loaded: true, state: 'idle'})),
+      () => setRv(r => ({...r, state: 'error'})),
+    );
+  };
+  const showReviews = () => {
+    setTab('reviews');
+    if (!rv.loaded && rv.state === 'idle') loadReviews();
+  };
 
   const ed = book.editions.find(e => e.id === book.editionId) ?? book.editions[0];
 
@@ -216,7 +291,7 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
             {book.rating ? (
               <Text style={styles.meta}>
                 {stars(book.rating)} {book.rating.toFixed(1)}
-                {book.ratingsCount ? `  (${book.ratingsCount} ratings${book.reviewsCount ? `, ${book.reviewsCount} reviews` : ''})` : ''}
+                {book.ratingsCount ? `  (${book.ratingsCount} ratings)` : ''}
               </Text>
             ) : null}
             <View style={styles.tagBox}>
@@ -245,9 +320,38 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
           </View>
         </View>
 
-        {book.description ? (
+        <View style={styles.tabs}>
+          <Pressable accessibilityRole="tab" accessibilityLabel="About tab" accessibilityState={{selected: tab === 'about'}} style={[styles.tab, tab === 'about' && styles.tabOn]} onPress={() => setTab('about')}>
+            <Text style={[styles.tabText, tab === 'about' && styles.tabTextOn]}>About</Text>
+          </Pressable>
+          <Pressable accessibilityRole="tab" accessibilityLabel="Reviews tab" accessibilityState={{selected: tab === 'reviews'}} style={[styles.tab, tab === 'reviews' && styles.tabOn]} onPress={showReviews}>
+            <Text style={[styles.tabText, tab === 'reviews' && styles.tabTextOn]}>Reviews</Text>
+          </Pressable>
+        </View>
+
+        {tab === 'reviews' ? (
           <View>
-            <Text style={styles.label}>About</Text>
+            {rv.items.map(r => (
+              <ReviewEntry key={r.id} r={r} onMore={() => setOpenReview(r)} />
+            ))}
+            {rv.state === 'loading' ? <Text style={styles.status}>{rv.items.length ? 'Loading more…' : 'Loading reviews…'}</Text> : null}
+            {rv.state === 'error' ? (
+              <>
+                <Text style={styles.status}>Could not load reviews.</Text>
+                <Pressable accessibilityRole="button" style={styles.more} onPress={loadReviews}>
+                  <Text style={styles.moreText}>Retry</Text>
+                </Pressable>
+              </>
+            ) : null}
+            {rv.loaded && !rv.items.length && rv.state === 'idle' ? <Text style={styles.status}>No reviews yet.</Text> : null}
+            {rv.hasMore && rv.state === 'idle' ? (
+              <Pressable accessibilityRole="button" style={styles.more} onPress={loadReviews}>
+                <Text style={styles.moreText}>Load more</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : book.description ? (
+          <View>
             <Text
               style={styles.description}
               numberOfLines={aboutOpen ? undefined : 5}
@@ -277,6 +381,23 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
           <Text style={styles.actionText}>Write review</Text>
         </Pressable>
       </View>
+
+      {openReview ? (
+        // overlay like the cover: the list underneath stays mounted, so Back to reviews lands on the same position
+        <View style={styles.coverFull}>
+          <TopBar title="Review" onBack={() => setOpenReview(null)} />
+          <ScrollView contentContainerStyle={styles.content}>
+            <Text style={styles.rvBook}>{join([book.title, book.authors.join(', ')])}</Text>
+            <ReviewHead r={openReview} />
+            <Text style={[styles.description, styles.rvFull]}>{openReview.text}</Text>
+          </ScrollView>
+          <View style={styles.actions}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Back to reviews" style={styles.action} onPress={() => setOpenReview(null)}>
+              <Text style={styles.actionText}>Back to reviews</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
 
       {view === 'cover' && book.cover ? (
         // overlay, not a sub-view: the page underneath stays mounted, so its scroll position survives
@@ -349,6 +470,22 @@ const styles = StyleSheet.create({
   description: {fontSize: 21, lineHeight: 30, color: BLACK},
   more: {height: 56, alignSelf: 'flex-start', marginTop: 8, paddingHorizontal: 24, borderWidth: 2, borderColor: BLACK, justifyContent: 'center'},
   moreText: {fontSize: 20, fontWeight: '700', color: BLACK},
+  tabs: {flexDirection: 'row', marginTop: 20, marginBottom: 8},
+  tab: {flex: 1, height: 56, borderWidth: 2, borderColor: BLACK, alignItems: 'center', justifyContent: 'center'},
+  tabOn: {backgroundColor: BLACK},
+  tabText: {fontSize: 22, fontWeight: '700', color: BLACK},
+  tabTextOn: {color: WHITE},
+  status: {fontSize: 21, color: BLACK, marginTop: 14},
+  rv: {paddingVertical: 12, borderBottomWidth: 1.5, borderColor: BLACK},
+  rvLine: {flexDirection: 'row', alignItems: 'center', marginTop: 2},
+  rvName: {fontSize: 21, fontWeight: '700', color: BLACK, flexShrink: 1, marginRight: 10},
+  rvStars: {fontSize: 21, color: BLACK, marginLeft: 6},
+  rvDate: {fontSize: 18, color: BLACK, marginRight: 10},
+  rvText: {fontSize: 21, lineHeight: 30, color: BLACK, marginTop: 4},
+  rvBook: {fontSize: 18, color: BLACK, marginBottom: 6},
+  rvFull: {marginTop: 12},
+  pill: {borderWidth: 1.5, borderColor: BLACK, borderRadius: 14, paddingHorizontal: 9, height: 26, justifyContent: 'center', marginRight: 6},
+  pillText: {fontSize: 18, color: BLACK, includeFontPadding: false},
   actions: {flexDirection: 'row', paddingVertical: 16, paddingLeft: 16, paddingRight: 2, borderTopWidth: 2, borderColor: BLACK},
   action: {flex: 1, height: 68, borderWidth: 3, borderColor: BLACK, alignItems: 'center', justifyContent: 'center', marginRight: 14},
   actionText: {fontSize: 24, fontWeight: '700', color: BLACK},

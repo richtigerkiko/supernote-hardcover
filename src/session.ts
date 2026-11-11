@@ -6,6 +6,7 @@
 // does not remount the page: plugin.ts calls opened() on every press and the page reloads its book from it.
 import type {BookDetail as PageBook} from './ui/DetailPage';
 import type {Entry} from './ui/JournalPage';
+import type {Review} from './hardcover';
 
 /** One reader sample: the open file, its 0-based page and the total pages. */
 export interface Sample {
@@ -28,6 +29,7 @@ export interface SessionApi {
   setStatus(label: string): Promise<void>;
   addToLibrary(): Promise<void>;
   writeReview(): Promise<void>;
+  loadReviews(offset: number): Promise<{reviews: Review[]; hasMore: boolean}>;
 }
 
 interface Session {

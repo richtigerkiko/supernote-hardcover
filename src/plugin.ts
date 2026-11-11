@@ -23,6 +23,7 @@ import {
   bookIdsForIsbns,
   editionsForIsbns,
   fetchBookDetail,
+  fetchReviews,
   fetchUserBooks,
   saveJournal,
   saveProgress,
@@ -449,6 +450,12 @@ const api: SessionApi = {
     tracker.forget(c.path);
   },
   writeReview: () => dialogOk('Writing a review from the device is not available yet.').then(() => {}),
+  async loadReviews(offset) {
+    const c = current;
+    if (!c) throw new Error('no book loaded');
+    await needPermissions();
+    return fetchReviews(oauth, c.item.bookId, offset);
+  },
 };
 
 session.api = api;
