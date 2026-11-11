@@ -66,7 +66,9 @@ export default function App(): React.JSX.Element {
       setSyncNote('');
       setJournal(null);
       const isJournal = session.mode === 'journal';
-      Promise.all([session.api?.load(), isJournal ? session.api?.passage() : ''])
+      // The selection is taken only once a book is shown, so a sign-in in between does not lose it.
+      Promise.resolve(session.api?.load())
+        .then((r: any) => (r.book && isJournal ? session.api!.passage().then(p => [r, p]) : [r, '']))
         .then(([r, passage]: any) => {
           if (mine !== latest) return;
           if (r.book) {

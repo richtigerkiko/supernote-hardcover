@@ -128,7 +128,7 @@ const oauth = new OAuthSession({
   store: fileTokenStore(async () => {
     if (!tokenFile) {
       const dir = await privateDir();
-      tokenFile = createJsonFile<Partial<TokenSet>>(native && dir ? native : null, `${dir}/tokens.json`);
+      tokenFile = createJsonFile<Partial<TokenSet>>(native && dir ? native : null, `${dir}/tokens.json`, {}, true);
     }
     return tokenFile;
   }),
@@ -346,9 +346,10 @@ const api: SessionApi = {
   async load() {
     signInAbort?.abort(); // a reload (the button pressed again) drops a waiting sign-in: its code is no longer on screen
     const mine = ++loadSeq;
+    // Checked before the sample is taken: the pending sample (and, in App, the selection) stays for the reload after the sign-in.
+    if (!(await oauth.isSignedIn())) return {message: 'Sign in to Hardcover to sync your reading.', signIn: true};
     const s = await (session.pending ?? safeSample());
     session.pending = null;
-    if (!(await oauth.isSignedIn())) return {message: 'Sign in to Hardcover to sync your reading.', signIn: true};
     if (!s) return {message: 'Open an EPUB in a document to see its Hardcover page.'};
     if (memMeta.get(s.path)?.failed) memMeta.delete(s.path); // a button press tries a failed read again
     await needPermissions();
@@ -387,6 +388,7 @@ const api: SessionApi = {
     }
     tokenOk = !DEBUG_GESTURES;
     dropReadingList();
+    tracker.reset();
     log('signed in');
     return true;
   },
