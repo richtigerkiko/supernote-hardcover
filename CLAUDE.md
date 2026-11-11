@@ -49,7 +49,7 @@ Push from Git Bash with `MSYS_NO_PATHCONV=1` (it rewrites `/storage/...` paths),
 
 Install with Settings > Apps > Plugins > Add Plugin (not "reinstall"). Bump `versionCode` (and `versionName`/`package.json` together) every install (30 in `PluginConfig.json` now; the installer refuses a lower or equal code with "This plugin version is too low"). The branch is `master`. The package is megabytes because of the native module; if you ever go back to JS-only, delete `build/` first or a stale `app.npk` is zipped into it silently. `src/clientId.generated.js` and `build/` are gitignored. The emulator is usually running too, so always `adb -s <serial>`.
 
-Branding assets in `assets/` come from the Hardcover press kit (hardcover.app/pages/about): `icon.png` (toolbar buttons, from `logo-line-white.png` cropped so the outline touches the edges, 96x96), `plugin-icon.png` (`iconPath`, from `logo-line-white.png`, 192x192; black outline, suits the greyscale e-ink screen), `logo.png` (detail page top bar, from `Hardcover OneColor Dark.png`). Not yet checked on the emulator or the Nomad.
+Branding assets in `assets/` come from the Hardcover press kit (hardcover.app/pages/about): `icon.png` (toolbar buttons, from `logo-line-white.png` cropped so the outline touches the edges and thickened by 2 source px, 96x96), `plugin-icon.png` (`iconPath`, same treatment, 192x192; black outline, suits the greyscale e-ink screen), `logo.png` (detail page top bar, from `Hardcover OneColor Dark.png`). Not yet checked on the emulator or the Nomad.
 
 ## Detail page and emulator preview
 
