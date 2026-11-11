@@ -1,7 +1,7 @@
 name: Release
 on:
   push:
-    branches: [master]
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: write
@@ -25,7 +25,7 @@ jobs:
           read -r v code <<< "$out" || true
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "code=$code" >> "$GITHUB_OUTPUT"
-          # CI working tree only, nothing is committed back (master is protected)
+          # CI working tree only, nothing is committed back (main is protected)
           if [ -n "$v" ]; then
             jq --arg v "$v" --argjson c "$code" '.versionName=$v | .versionCode=$c' PluginConfig.json > pc.tmp && mv pc.tmp PluginConfig.json
             npm version "$v" --no-git-tag-version --allow-same-version
@@ -55,6 +55,6 @@ jobs:
         run: |
           tag="v${{ steps.ver.outputs.version }}-${{ steps.ver.outputs.code }}"
           flags=""
-          # manual runs on any branch but master publish a pre-release for testers
-          if [ "$GITHUB_REF_NAME" != master ]; then tag="$tag-dev"; flags="--prerelease"; fi
+          # manual runs on any branch but main publish a pre-release for testers
+          if [ "$GITHUB_REF_NAME" != main ]; then tag="$tag-dev"; flags="--prerelease"; fi
           gh release create "$tag" build/outputs/HardcoverSync.snplg --target "$GITHUB_SHA" --generate-notes $flags
