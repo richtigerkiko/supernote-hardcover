@@ -63,4 +63,4 @@ jobs:
           flags=""
           # manual runs on any branch but main publish a pre-release for testers
           if [ "$GITHUB_REF_NAME" != main ]; then tag="$tag-dev"; flags="--prerelease"; fi
-          gh release create "$tag" build/outputs/HardcoverSync.snplg --target "$GITHUB_SHA" --generate-notes $flags
+          gh release create "$tag" build/outputs/supernote-hardcover.snplg --target "$GITHUB_SHA" --generate-notes $flags
