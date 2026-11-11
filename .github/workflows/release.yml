@@ -29,7 +29,7 @@ jobs:
           HARDCOVER_OAUTH_CLIENT_ID: ${{ secrets.HARDCOVER_OAUTH_CLIENT_ID }}
         run: |
           node scripts/write-client-id.js
-          bash buildPlugin.sh
+          bash scripts/buildPlugin.sh
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
