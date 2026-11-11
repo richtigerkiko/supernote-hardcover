@@ -1,5 +1,5 @@
-import React, {useState} from 'react';
-import {Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import React, {useRef, useState} from 'react';
+import {PanResponder, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import type {BookDetail} from './DetailPage';
 
 // Review card, presentational like JournalPage: no SDK, everything arrives as props.
@@ -14,6 +14,65 @@ type Props = {
   onSave: (r: Review) => Promise<void>; // rejects with Error on failure
   onClose: () => void;
 };
+
+// Half-step rating (0.5 to 5) for a horizontal position on a row of `width` split into five stars.
+export const ratingAt = (x: number, width: number): number => (width > 0 ? Math.min(5, Math.max(0.5, Math.ceil((x / width) * 10) / 2)) : 0);
+// How much of star n is filled for a rating: 0, 0.5 or 1.
+export const fillOf = (rating: number, n: number): number => Math.min(1, Math.max(0, rating - (n - 1)));
+
+// Five stars you tap or drag across (measured on the Nomad: drags follow the finger and the page scroll does not take them).
+// Tapping the rating you already have clears it. A half star is the solid star clipped over the outline star, because the
+// device font has no half-star glyph (U+2BEA and friends draw as boxes). Also an adjustable element for screen readers.
+function Stars({value, onChange, disabled}: {value: number; onChange: (v: number) => void; disabled: boolean}) {
+  const [width, setWidth] = useState(0);
+  const live = useRef({value, onChange, disabled, width});
+  live.current = {value, onChange, disabled, width};
+  const touch = useRef({start: 0, moved: false});
+  const pan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => false, // the page scrolls vertically; a swipe on the stars is for the rating
+      onPanResponderGrant: e => {
+        const l = live.current;
+        touch.current = {start: l.value, moved: false};
+        if (!l.disabled) l.onChange(ratingAt(e.nativeEvent.locationX, l.width));
+      },
+      onPanResponderMove: e => {
+        const l = live.current;
+        const r = ratingAt(e.nativeEvent.locationX, l.width);
+        if (r !== l.value) touch.current.moved = true;
+        if (!l.disabled) l.onChange(r);
+      },
+      onPanResponderRelease: () => {
+        const l = live.current;
+        if (!l.disabled && !touch.current.moved && l.value === touch.current.start) l.onChange(0);
+      },
+    }),
+  ).current;
+  return (
+    <View
+      accessibilityRole="adjustable"
+      accessibilityLabel="Rating"
+      accessibilityValue={{text: value ? `${value} of 5` : 'none'}}
+      accessibilityActions={[{name: 'increment'}, {name: 'decrement'}]}
+      onAccessibilityAction={e => !disabled && onChange(Math.min(5, Math.max(0, value + (e.nativeEvent.actionName === 'increment' ? 0.5 : -0.5))))}
+      onLayout={e => setWidth(e.nativeEvent.layout.width)}
+      style={styles.stars}
+      {...pan.panHandlers}>
+      {[1, 2, 3, 4, 5].map(n => (
+        <View key={n} pointerEvents="none" style={styles.star}>
+          <Text style={styles.starGlyph}>☆</Text>
+          <View style={[styles.starClip, {width: `${fillOf(value, n) * 100}%`}]}>
+            <View style={[styles.starCell, {width: width / 5}]}>
+              <Text style={styles.starGlyph}>★</Text>
+            </View>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
 
 function Check({label, on, busy, onPress}: {label: string; on: boolean; busy: boolean; onPress: () => void}) {
   return (
@@ -69,25 +128,7 @@ export default function ReviewPage({book, initial = BLANK_REVIEW, onSave, onClos
             </>
           ) : (
             <>
-              <View style={styles.rating}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Lower rating"
-                  disabled={busy || rating === 0}
-                  style={styles.step}
-                  onPress={() => setRating(r => (r <= 0.5 ? 0 : r - 0.5))}>
-                  <Text style={styles.stepText}>−</Text>
-                </Pressable>
-                <Text style={styles.ratingText}>{rating ? `★ ${rating} / 5` : 'No rating'}</Text>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Raise rating"
-                  disabled={busy || rating === 5}
-                  style={styles.step}
-                  onPress={() => setRating(r => Math.min(5, r + 0.5))}>
-                  <Text style={styles.stepText}>+</Text>
-                </Pressable>
-              </View>
+              <Stars value={rating} onChange={setRating} disabled={busy} />
               <TextInput
                 accessibilityLabel="Review"
                 style={[styles.input, {height: 6 * 28 + 24}]}
@@ -100,8 +141,10 @@ export default function ReviewPage({book, initial = BLANK_REVIEW, onSave, onClos
                 value={text}
                 onChangeText={setText}
               />
+              <View style={styles.checks}>
               <Check label="This review contains spoilers" on={spoilers} busy={busy} onPress={() => setSpoilers(v => !v)} />
               <Check label="Sponsored or ARC review" on={sponsored} busy={busy} onPress={() => setSponsored(v => !v)} />
+              </View>
               <View>
                 <Text style={styles.label}>Private notes</Text>
                 <TextInput
@@ -146,13 +189,16 @@ const styles = StyleSheet.create({
   heading: {fontSize: 22, fontWeight: '700', color: BLACK},
   close: {width: 56, height: 56, borderWidth: 3, borderColor: BLACK, alignItems: 'center', justifyContent: 'center'},
   closeText: {fontSize: 28, color: BLACK},
-  rating: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
-  step: {width: 68, height: 56, borderWidth: 3, borderColor: BLACK, alignItems: 'center', justifyContent: 'center'},
-  stepText: {fontSize: 28, fontWeight: '700', color: BLACK},
-  ratingText: {fontSize: 24, fontWeight: '700', color: BLACK},
+  stars: {flexDirection: 'row', height: 64},
+  star: {flex: 1, height: 64, alignItems: 'center', justifyContent: 'center'},
+  starGlyph: {fontSize: 52, lineHeight: 64, color: BLACK},
+  // the solid star, clipped to the rated share of its cell, over the outline star
+  starClip: {position: 'absolute', left: 0, top: 0, bottom: 0, overflow: 'hidden'},
+  starCell: {height: 64, alignItems: 'center', justifyContent: 'center'},
   input: {fontSize: 20, lineHeight: 28, borderWidth: 2, borderColor: BLACK, padding: 12, color: BLACK},
   label: {fontSize: 18, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', color: BLACK, marginBottom: 6},
-  check: {flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 56},
+  checks: {flexDirection: 'row', gap: 16},
+  check: {flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56},
   box: {width: 40, height: 40, borderWidth: 3, borderColor: BLACK, alignItems: 'center', justifyContent: 'center'},
   checkMark: {fontSize: 26, fontWeight: '700'},
   line: {fontSize: 20, color: BLACK},

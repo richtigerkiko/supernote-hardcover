@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
-import ReviewPage from '../src/ui/ReviewPage';
+import ReviewPage, {fillOf, ratingAt} from '../src/ui/ReviewPage';
 import {MOCK_BOOK} from '../src/ui/mockBook';
 
 const texts = (node: any): string[] => {
@@ -39,10 +39,10 @@ test('saves text, half-step rating and spoilers flag, then shows the saved state
   const onSave = jest.fn().mockResolvedValue(undefined);
   const t = render({onSave});
   type(t, ' Loved it ');
-  press(t, 'Raise rating');
-  press(t, 'Raise rating');
-  press(t, 'Raise rating');
-  expect(all(t)).toContain('★ 1.5 / 5');
+  act(() => field(t, 'Rating').props.onAccessibilityAction({nativeEvent: {actionName: 'increment'}}));
+  act(() => field(t, 'Rating').props.onAccessibilityAction({nativeEvent: {actionName: 'increment'}}));
+  act(() => field(t, 'Rating').props.onAccessibilityAction({nativeEvent: {actionName: 'increment'}}));
+  expect(field(t, 'Rating').props.accessibilityValue.text).toBe('1.5 of 5');
   act(() => field(t, 'This review contains spoilers').props.onPress());
   act(() => field(t, 'Sponsored or ARC review').props.onPress());
   type(t, ' for me ', 'Private notes');
@@ -54,9 +54,9 @@ test('saves text, half-step rating and spoilers flag, then shows the saved state
 test('no rating is left out; lowering below 0.5 clears it', async () => {
   const onSave = jest.fn().mockResolvedValue(undefined);
   const t = render({onSave});
-  press(t, 'Raise rating');
-  press(t, 'Lower rating');
-  expect(all(t)).toContain('No rating');
+  act(() => field(t, 'Rating').props.onAccessibilityAction({nativeEvent: {actionName: 'increment'}}));
+  act(() => field(t, 'Rating').props.onAccessibilityAction({nativeEvent: {actionName: 'decrement'}}));
+  expect(field(t, 'Rating').props.accessibilityValue.text).toBe('none');
   type(t, 'fine');
   await save(t);
   expect(onSave).toHaveBeenCalledWith({markdown: 'fine', hasSpoilers: false, sponsored: false, notes: ''});
@@ -65,7 +65,7 @@ test('no rating is left out; lowering below 0.5 clears it', async () => {
 test('starts from what the entry already holds', async () => {
   const onSave = jest.fn().mockResolvedValue(undefined);
   const t = render({onSave, initial: {markdown: 'old', hasSpoilers: true, sponsored: false, notes: 'n', rating: 3}});
-  expect(all(t)).toContain('★ 3 / 5');
+  expect(field(t, 'Rating').props.accessibilityValue.text).toBe('3 of 5');
   await save(t);
   expect(onSave).toHaveBeenCalledWith({markdown: 'old', hasSpoilers: true, sponsored: false, notes: 'n', rating: 3});
 });
@@ -79,4 +79,18 @@ test('a failed save shows the error and Retry, and retrying works', async () => 
   expect(all(t)).toContain('Retry');
   await save(t);
   expect(all(t)).toContain('✓ Review saved');
+});
+
+test('ratingAt maps a position on the star row to half steps, 0.5 to 5', () => {
+  expect(ratingAt(0, 500)).toBe(0.5);
+  expect(ratingAt(49, 500)).toBe(0.5);
+  expect(ratingAt(51, 500)).toBe(1);
+  expect(ratingAt(250, 500)).toBe(2.5);
+  expect(ratingAt(900, 500)).toBe(5);
+  expect(ratingAt(10, 0)).toBe(0);
+});
+
+test('fillOf gives the filled share of each star (a half star is 0.5)', () => {
+  expect([1, 2, 3, 4, 5].map(n => fillOf(3.5, n))).toEqual([1, 1, 1, 0.5, 0]);
+  expect([1, 2].map(n => fillOf(0, n))).toEqual([0, 0]);
 });
