@@ -1,6 +1,6 @@
 import React, {useState} from 'react';
 import {Image, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
-import EditionPicker, {Item, TopBar, edLine1, edLine2} from './EditionPicker';
+import EditionPicker, {Item, TopBar} from './EditionPicker';
 
 // Book detail page, ported from the design artifact. Presentational only: no SDK imports, everything arrives as props,
 // so it can be designed on the emulator with mock data and unit tested. E-ink rules: black on white, no animation,
@@ -57,6 +57,8 @@ const stars = (rating: number) => {
   const full = Math.round(rating);
   return '★'.repeat(full) + '☆'.repeat(5 - full);
 };
+
+const join = (parts: (string | number | null | undefined)[]) => parts.filter(Boolean).join(' · ');
 
 const CHIP_GAP = 6;
 const PILL_WIDTH = 52; // "+99" at 18 sp, border and padding included
@@ -222,18 +224,26 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
               <Row label="Mood" items={book.moods} />
               <Row label="Tags" items={book.tags} />
             </View>
+            <View style={styles.chipRow}>
+              <Text style={styles.chipLabel}>Edition</Text>
+              <View style={styles.edBox}>
+                <View style={styles.edText}>
+                  <Text style={styles.edName} numberOfLines={1} ellipsizeMode="tail">
+                    {join([ed.format, ed.publisher])}
+                  </Text>
+                  <Text style={styles.edMeta} numberOfLines={1} ellipsizeMode="tail">
+                    {join([ed.isbn, ed.lang, ed.year])}
+                  </Text>
+                </View>
+                <Pressable accessibilityRole="button" accessibilityLabel="Change edition" style={styles.edPencil} onPress={() => setView('editions')}>
+                  <View style={styles.pencil}>
+                    <View style={styles.pencilTip} />
+                  </View>
+                </Pressable>
+              </View>
+            </View>
           </View>
         </View>
-
-        <Pressable accessibilityRole="button" accessibilityLabel="Change edition" style={styles.edRow} onPress={() => setView('editions')}>
-          <View style={styles.edText}>
-            <Text style={styles.l0}>Edition of this file</Text>
-            <Text style={styles.l1}>{edLine1(ed)}</Text>
-            <Text style={styles.l2}>{edLine2(ed)}</Text>
-            <Text style={[styles.l2, styles.bold]}>{book.editionSaved ? '✓ Saved for this file' : book.editionIsbn ? "✓ Matches the file's ISBN" : 'Not confirmed yet'}</Text>
-          </View>
-          <Text style={styles.go}>Change ›</Text>
-        </Pressable>
 
         {book.description ? (
           <View>
@@ -290,7 +300,7 @@ const styles = StyleSheet.create({
   page: {flex: 1, backgroundColor: WHITE},
   topBar: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 20, paddingRight: 64, height: 68, borderBottomWidth: 2, borderColor: BLACK}, // right gap: the host's floating home button sits there
   close: {width: 56, height: 56, alignItems: 'center', justifyContent: 'center'},
-  logo: {width: 120, height: 26, resizeMode: 'contain'},
+  logo: {width: 120, height: 26, resizeMode: 'contain', marginLeft: 4, marginRight: 'auto', marginTop: 6},
   closeText: {fontSize: 28, color: BLACK},
   trackingBox: {flexDirection: 'row', alignItems: 'center'},
   trackingLabel: {fontSize: 20, color: BLACK, marginRight: 12},
@@ -323,8 +333,13 @@ const styles = StyleSheet.create({
   chip: {borderWidth: 1.5, borderColor: BLACK, borderRadius: 14, paddingHorizontal: 9, marginRight: CHIP_GAP, height: 26, justifyContent: 'center'},
   chipText: {fontSize: 18, color: BLACK, includeFontPadding: false},
   measure: {position: 'absolute', left: 0, top: 0, opacity: 0, flexDirection: 'row'},
-  edRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, paddingVertical: 10, paddingHorizontal: 16, borderWidth: 2, borderColor: BLACK},
-  edText: {flex: 1},
+  edBox: {flex: 1, flexDirection: 'row', minHeight: 48, borderWidth: 1.5, borderColor: BLACK, borderRadius: 14, paddingLeft: 10},
+  edText: {flex: 1, justifyContent: 'center', paddingVertical: 4},
+  edName: {fontSize: 18, fontWeight: '700', color: BLACK, includeFontPadding: false},
+  edMeta: {fontSize: 18, color: BLACK, includeFontPadding: false},
+  edPencil: {width: 48, alignSelf: 'stretch', alignItems: 'center', paddingTop: 8}, // full box height, no border
+  pencil: {width: 8, height: 22, borderWidth: 2, borderColor: BLACK, transform: [{rotate: '45deg'}], marginTop: 2}, // drawn with Views: a text glyph may be missing from the Nomad's font
+  pencilTip: {position: 'absolute', bottom: -8, left: -2, width: 0, height: 0, borderLeftWidth: 4, borderRightWidth: 4, borderTopWidth: 7, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: BLACK},
   l0: {fontSize: 17, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', color: BLACK},
   l1: {fontSize: 21, fontWeight: '700', color: BLACK},
   l2: {fontSize: 19, color: BLACK},

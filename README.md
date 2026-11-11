@@ -6,7 +6,7 @@ It runs fully on the device. The only network traffic is to the Hardcover API.
 
 ## What it does
 
-- **Tracks the book you have open.** Progress is sent each time you cross a 2% step of the book, forwards or backwards. A few pages inside one step never push, so flipping back to re-read is harmless.
+- **Tracks the book you have open.** Every page turn is sent, forwards or backwards, at most once every 10 seconds; pages turned in between go out with the next touch after that.
 - **Finds the book by itself.** Title, author and ISBN come from the EPUB's metadata, not the filename, and are matched against your Hardcover library.
 - **Uses your edition.** Pick the edition you own and page counts are computed against it. Font size and orientation changes don't matter.
 - **Off by default, per book.** A Tracking toggle on each book's page decides what gets sent.

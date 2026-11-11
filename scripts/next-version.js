@@ -22,12 +22,17 @@ function nextVersion(base, code, messages) {
   return { version: v.join('.'), code: code + 1 };
 }
 
+// Base version comes from the latest stable tag vA.B.C-CODE; the code is the highest of all tags, dev
+// pre-releases vA.B.C-CODE-dev included, because the device refuses an equal or lower versionCode.
 function latestTag(tags) {
-  const parsed = tags
+  const stable = tags
     .map((t) => /^v(\d+\.\d+\.\d+)-(\d+)$/.exec(t))
     .filter(Boolean)
-    .map((m) => ({ tag: m[0], version: m[1], code: Number(m[2]) }));
-  return parsed.sort((x, y) => y.code - x.code)[0]; // versionCode only ever rises
+    .map((m) => ({ tag: m[0], version: m[1], code: Number(m[2]) }))
+    .sort((x, y) => y.code - x.code)[0];
+  if (!stable) return undefined;
+  const devCodes = tags.map((t) => /^v\d+\.\d+\.\d+-(\d+)-dev$/.exec(t)).filter(Boolean).map((m) => Number(m[1]));
+  return { ...stable, code: Math.max(stable.code, ...devCodes) };
 }
 
 if (require.main === module) {

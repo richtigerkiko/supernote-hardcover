@@ -35,8 +35,14 @@ test('shows the book, its progress on the chosen edition, chips and the tracking
   expect(t).toContain('Page 106 of 330 · 32%');
   expect(t).toContain('Horror');
   expect(t).toContain('Currently reading ▾');
-  expect(t).toContain('Not confirmed yet');
   expect(t).toContain('ON');
+});
+
+test('the edition block joins only the parts that exist', () => {
+  const ed = (e: any) => all(render({book: {...MOCK_BOOK, editions: [{id: 'a', format: 'Ebook', publisher: '', pages: 10, lang: '', ...e}], editionId: 'a'}}));
+  expect(ed({})).not.toContain('Ebook ·');
+  expect(ed({isbn: '9781234567890', year: 2020})).toContain('9781234567890 · 2020');
+  expect(ed({publisher: 'Pub', lang: 'English'})).toContain('Ebook · Pub|English');
 });
 
 test('the toggle shows OFF when tracking is paused and calls back when pressed', () => {

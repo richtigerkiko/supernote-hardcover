@@ -1,5 +1,5 @@
 import type {ReadingItem, ReadRecord} from '../src/hardcover';
-import {createTracker, stepOf, STEP_PERCENT, type TrackerDeps} from '../src/tracker';
+import {createTracker, type TrackerDeps} from '../src/tracker';
 
 const BUTCHER: ReadingItem = {
   userBookId: 7,
@@ -14,7 +14,8 @@ const BUTCHER: ReadingItem = {
 const readOf = (id: number): ReadRecord => ({id, started_at: null, finished_at: null, progress_pages: null, edition_id: null});
 const PATH = '/Document/ebooks/butcher.epub';
 const TOTAL = 332;
-// with 2% steps and 332 reader pages one step is 6.64 pages: index 81 (page 82, 24.7%) is step 12, index 86 (page 87, 26.2%) step 13
+// 332 reader pages on a 330-page edition: index 81 is edition page 82, index 86 page 87; pushes are throttled to one per 10 s
+const WINDOW = 10_001;
 
 const setup = ({item = BUTCHER, pushFails}: {item?: ReadingItem | null; pushFails?: string} = {}) => {
   let t = 1_000_000;
@@ -33,15 +34,6 @@ const setup = ({item = BUTCHER, pushFails}: {item?: ReadingItem | null; pushFail
 const at = (page: number, total = TOTAL, path = PATH) => ({path, page, total});
 const edition = (page: number, total = TOTAL) => Math.round(((page + 1) / total) * 330);
 
-test('steps: 2% of the book, the last page is the last step', () => {
-  expect(STEP_PERCENT).toBe(2);
-  expect(stepOf(81, TOTAL)).toBe(12);
-  expect(stepOf(86, TOTAL)).toBe(13);
-  expect(stepOf(TOTAL - 1, TOTAL)).toBe(50);
-  expect(stepOf(5000, TOTAL)).toBe(50); // a page past the end is the end
-  expect(stepOf(28, 50)).toBe(29); // 29/50 is exactly 58%, which float division put just under
-});
-
 test('first sight of a book pushes nothing, however long you stay', async () => {
   const {tracker, pushes, advance} = setup();
   await tracker.tick(at(81));
@@ -50,39 +42,42 @@ test('first sight of a book pushes nothing, however long you stay', async () => 
   expect(pushes).toEqual([]);
 });
 
-test('pages inside the same 2% step never push, so a few accidental turns are harmless', async () => {
-  const {tracker, pushes} = setup();
-  await tracker.tick(at(81)); // baseline: step 12
-  for (const p of [82, 83, 84, 85, 84, 83, 82, 81]) await tracker.tick(at(p));
-  expect(pushes).toEqual([]);
+test('every page turn pushes the current edition page, both directions', async () => {
+  const {tracker, pushes, advance} = setup();
+  await tracker.tick(at(81)); // baseline
+  await tracker.tick(at(86));
+  advance(WINDOW);
+  await tracker.tick(at(93));
+  advance(WINDOW);
+  await tracker.tick(at(81)); // back
+  expect(pushes).toEqual([edition(86), edition(93), edition(81)]);
 });
 
-test('crossing a step pushes your current page on the edition, not the step boundary', async () => {
-  const {tracker, pushes} = setup();
+test('a turn inside the 10 s window waits and goes out at the first touch after it, latest page only', async () => {
+  const {tracker, pushes, advance} = setup();
   await tracker.tick(at(81));
-  await tracker.tick(at(85)); // 25.9%: still step 12
-  expect(pushes).toEqual([]);
-  await tracker.tick(at(86)); // 26.2%: step 13
+  await tracker.tick(at(86)); // pushed
+  advance(3000);
+  await tracker.tick(at(93));
+  await tracker.tick(at(130));
   expect(pushes).toEqual([edition(86)]);
-  await tracker.tick(at(88)); // still step 13
-  expect(pushes).toEqual([edition(86)]);
+  advance(WINDOW);
+  await tracker.tick(at(130));
+  expect(pushes).toEqual([edition(86), edition(130)]);
+  await tracker.tick(at(130)); // nothing new
+  expect(pushes.length).toBe(2);
 });
 
-test('reading on pushes once per step crossed, and one read that jumps several steps pushes once', async () => {
-  const {tracker, pushes} = setup();
+test('going back to the pushed page inside the window pushes nothing', async () => {
+  const {tracker, pushes, advance} = setup();
   await tracker.tick(at(81));
-  await tracker.tick(at(86)); // step 13
-  await tracker.tick(at(93)); // 28.3%: step 14
-  await tracker.tick(at(130)); // skipped far ahead in one go: step 19, a single push
-  expect(pushes).toEqual([edition(86), edition(93), edition(130)]);
-});
-
-test('progress follows you backwards across a step too', async () => {
-  const {tracker, pushes} = setup();
-  await tracker.tick(at(81)); // step 12
-  await tracker.tick(at(111)); // a peek ahead: step 16
-  await tracker.tick(at(81)); // and back
-  expect(pushes).toEqual([edition(111), edition(81)]);
+  await tracker.tick(at(86)); // pushed
+  advance(3000);
+  await tracker.tick(at(111));
+  await tracker.tick(at(86));
+  advance(WINDOW);
+  await tracker.tick(at(86));
+  expect(pushes).toEqual([edition(86)]);
 });
 
 test('a book that is not on the reading list is never pushed', async () => {
@@ -177,17 +172,19 @@ test('nonsense samples (no total, negative page) are ignored', async () => {
   expect(pushes).toEqual([]);
 });
 
-// A font or orientation change reflows the book: the reader's page count (total) changes but the share of the book
-// you are at does not, so it can never look like a step crossing by itself.
+// A font or orientation change reflows the book: the reader's page count (total) changes but the edition page you
+// are at does not, so it never looks like a page turn by itself.
 describe('reflow', () => {
-  test('a smaller or larger font at the same place pushes nothing; reading on pushes at the next step', async () => {
+  test('a smaller or larger font at the same place pushes nothing; reading on pushes', async () => {
     const {tracker, pushes} = setup();
-    await tracker.tick(at(81, 332)); // 24.7%: step 12
-    await tracker.tick(at(58, 240)); // same place, smaller font: 59/240 = 24.6%
-    await tracker.tick(at(98, 400)); // same place, larger font: 99/400 = 24.75%
+    await tracker.tick(at(81, 332)); // edition page 82
+    await tracker.tick(at(58, 240)); // same place, smaller font: rounds to 81
+    await tracker.tick(at(98, 400)); // same place, larger font: rounds to 82
     expect(pushes).toEqual([]);
-    await tracker.tick(at(66, 240)); // 67/240 = 27.9%: step 13
-    expect(pushes).toEqual([edition(66, 240)]);
+    await tracker.tick(at(66, 240)); // font changed back: rebase only
+    expect(pushes).toEqual([]);
+    await tracker.tick(at(70, 240)); // a real page turn
+    expect(pushes).toEqual([edition(70, 240)]);
   });
 });
 
@@ -218,6 +215,20 @@ describe('re-check of matched books', () => {
     return {tracker, advance: (ms: number) => (t += ms)};
   };
 
+  test('a refreshed edition with another page count rebases instead of pushing the same place', async () => {
+    let item: ReadingItem = BUTCHER;
+    const pushes: number[] = [];
+    const {tracker, advance} = run(async () => item, async (_it, pages) => void pushes.push(pages));
+    await tracker.tick(at(81));
+    item = {...BUTCHER, editionPages: 660};
+    advance(601_000);
+    await tracker.tick(at(81)); // re-checked: same place, other units
+    expect(pushes).toEqual([]);
+    advance(11_000);
+    await tracker.tick(at(86));
+    expect(pushes).toEqual([Math.round((87 / TOTAL) * 660)]);
+  });
+
   test('after the interval a matched book picks up a new read id', async () => {
     let item: ReadingItem = {...BUTCHER, read: readOf(1)};
     const used: number[] = [];
@@ -225,7 +236,7 @@ describe('re-check of matched books', () => {
     await tracker.tick(at(81));
     item = {...BUTCHER, read: readOf(2)};
     advance(601_000);
-    await tracker.tick(at(81)); // re-checked, same step
+    await tracker.tick(at(81)); // re-checked, same page
     await tracker.tick(at(86));
     expect(used).toEqual([2]);
   });
@@ -290,6 +301,7 @@ test('a lookup error names the file, and a push that settles after the book left
   await tracker.tick(at(86)); // pushes, fast
   expect(tracker.state.lastPush?.path).toBe(PATH);
   slow = true;
+  t += 11_000; // past the push throttle
   const hung = tracker.tick(at(111)); // crossing: a push that hangs
   while (!release) await Promise.resolve(); // until the push is hanging
   t += 61_000; // the hung tick expires, a new one re-checks and the book is gone

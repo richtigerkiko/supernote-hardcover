@@ -19,5 +19,6 @@ test('nextVersion takes the highest bump and resets lower parts', () => {
 
 test('latestTag picks the highest versionCode', () => {
   expect(latestTag(['v0.2.0-9', 'v0.2.1-29', 'junk', 'v0.1.0-3'])).toMatchObject({ version: '0.2.1', code: 29 });
+  expect(latestTag(['v0.2.1-29', 'v0.3.0-31-dev', 'v0.2.0-9'])).toEqual({ tag: 'v0.2.1-29', version: '0.2.1', code: 31 });
   expect(latestTag(['junk'])).toBeUndefined();
 });
