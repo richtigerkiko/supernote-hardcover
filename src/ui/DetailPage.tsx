@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import type {Review} from '../hardcover'; // type only: this file stays SDK-free at runtime
+import type {PublicReview} from '../hardcover'; // type only: this file stays SDK-free at runtime
 import {Image, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import EditionPicker, {Item, TopBar} from './EditionPicker';
 
@@ -51,7 +51,7 @@ type Props = {
   onSetStatus: (status: string) => void;
   onSetEdition: (editionId: string) => void;
   onAddToLibrary?: () => void; // only used when book.inLibrary is false
-  onLoadReviews?: (offset: number) => Promise<{reviews: Review[]; hasMore: boolean}>; // 10 at a time, first call on first open of the Reviews tab
+  onLoadReviews?: (offset: number) => Promise<{reviews: PublicReview[]; hasMore: boolean}>; // 10 at a time, first call on first open of the Reviews tab
 };
 
 const stars = (rating: number) => {
@@ -150,7 +150,7 @@ function Pill({text}: {text: string}) {
 }
 
 // Name, Supporter pill and stars on line one; date and spoiler pill on line two (shared by the list and the full view).
-function ReviewHead({r}: {r: Review}) {
+function ReviewHead({r}: {r: PublicReview}) {
   return (
     <>
       <View style={styles.rvLine}>
@@ -168,7 +168,7 @@ function ReviewHead({r}: {r: Review}) {
   );
 }
 
-function ReviewEntry({r, onMore}: {r: Review; onMore: () => void}) {
+function ReviewEntry({r, onMore}: {r: PublicReview; onMore: () => void}) {
   const [long, setLong] = useState(false);
   return (
     <View style={styles.rv}>
@@ -187,7 +187,7 @@ function ReviewEntry({r, onMore}: {r: Review; onMore: () => void}) {
   );
 }
 
-type Reviews = {items: Review[]; hasMore: boolean; loaded: boolean; state: 'idle' | 'loading' | 'error'};
+type Reviews = {items: PublicReview[]; hasMore: boolean; loaded: boolean; state: 'idle' | 'loading' | 'error'};
 const NO_REVIEWS: Reviews = {items: [], hasMore: false, loaded: false, state: 'idle'};
 
 export default function DetailPage({book, tracking, syncNote, onToggleTracking, onClose, onWriteReview, onSetStatus, onSetEdition, onAddToLibrary, onLoadReviews}: Props) {
@@ -197,7 +197,7 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
   const [aboutLong, setAboutLong] = useState(false);
   const [tab, setTab] = useState<'about' | 'reviews'>('about');
   const [rv, setRv] = useState<Reviews>(NO_REVIEWS);
-  const [openReview, setOpenReview] = useState<Review | null>(null);
+  const [openReview, setOpenReview] = useState<PublicReview | null>(null);
 
   useEffect(() => {
     setTab('about'); // another book was loaded

@@ -1,11 +1,17 @@
 import React, {useState} from 'react';
-import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import type {Edition} from './DetailPage';
 
 // Full-screen "Choose edition" list, shared by the detail page and the journal page. Same e-ink rules as DetailPage.
 
 export const edLine1 = (e: Edition) => `${e.format} · ${e.publisher}`;
 export const edLine2 = (e: Edition) => `${e.year ? `${e.year} · ` : ''}${e.pages} pages · ${e.lang}`;
+
+// Every typed word must appear somewhere in the edition's text, any order, any case.
+export const editionMatches = (e: Edition, query: string): boolean => {
+  const text = `${edLine1(e)} ${edLine2(e)} ${e.isbn ?? ''}`.toLowerCase();
+  return query.toLowerCase().split(/\s+/).filter(Boolean).every(w => text.includes(w));
+};
 
 export function TopBar({title, onBack}: {title: string; onBack: () => void}) {
   return (
@@ -38,14 +44,27 @@ export default function EditionPicker({editions, editionId, onPick, onClose}: Pr
   const [choice, setChoice] = useState(editionId);
   const shown = editions.filter(e => !e.audio && e.pages > 0);
   const hidden = editions.length - shown.length;
+  const [query, setQuery] = useState('');
+  const found = shown.filter(e => editionMatches(e, query));
   return (
     <View style={styles.page}>
       <TopBar title="Choose edition" onBack={onClose} />
-      <ScrollView>
+      <TextInput
+        style={styles.search}
+        value={query}
+        onChangeText={setQuery}
+        placeholder={`Search ${shown.length} editions`}
+        placeholderTextColor={BLACK}
+        autoCapitalize="none"
+        autoCorrect={false}
+        returnKeyType="search"
+      />
+      <ScrollView keyboardShouldPersistTaps="handled">
         <Text style={styles.pickNote}>
           {`Pick the edition this file is. Page counts and progress follow it.${hidden ? ` ${hidden} edition${hidden > 1 ? 's' : ''} without a page count hidden.` : ''}`}
         </Text>
-        {shown.map(e => (
+        {found.length === 0 ? <Text style={styles.pickNote}>No edition matches</Text> : null}
+        {found.map(e => (
           <Item key={e.id} on={e.id === choice} onPress={() => setChoice(e.id)}>
             <Text style={styles.l1}>{edLine1(e)}</Text>
             <Text style={styles.l2}>{edLine2(e)}</Text>
@@ -85,6 +104,7 @@ const styles = StyleSheet.create({
   actions: {flexDirection: 'row', paddingVertical: 16, paddingLeft: 16, paddingRight: 2, borderTopWidth: 2, borderColor: BLACK},
   action: {flex: 1, height: 68, borderWidth: 3, borderColor: BLACK, alignItems: 'center', justifyContent: 'center', marginRight: 14},
   actionText: {fontSize: 24, fontWeight: '700', color: BLACK},
+  search: {fontSize: 21, color: BLACK, height: 60, marginHorizontal: 16, marginVertical: 10, paddingHorizontal: 14, borderWidth: 3, borderColor: BLACK},
   pickNote: {fontSize: 19, lineHeight: 25, paddingVertical: 14, paddingHorizontal: 24, borderBottomWidth: 2, borderColor: BLACK, color: BLACK},
   item: {flexDirection: 'row', alignItems: 'center', minHeight: 88, paddingVertical: 10, paddingHorizontal: 24, borderBottomWidth: 2, borderColor: BLACK, backgroundColor: WHITE},
   itemOn: {borderLeftWidth: 8, paddingLeft: 16},

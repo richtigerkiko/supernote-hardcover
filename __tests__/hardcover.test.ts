@@ -1,5 +1,5 @@
 import type {ReadingItem} from '../src/hardcover';
-import {bookIdsForIsbns, fetchBookDetail, fetchUserBooks, localDate, progressInput, saveProgress, saveJournal, setStatus} from '../src/hardcover';
+import {bookIdsForIsbns, fetchBookDetail, fetchUserBooks, localDate, progressInput, saveProgress, saveJournal, saveReview, fetchReview, setStatus} from '../src/hardcover';
 
 // The SDK is the transport; these tests check what we send it and how we map what it returns.
 type Mocks = Record<string, jest.Mock>;
@@ -17,7 +17,7 @@ jest.mock('@hardcover/sdk', () => ({
   },
   JournalEvent: {Quote: 'quote', Note: 'note'},
   PrivacySetting: {Public: 1, Follows: 2, Private: 3},
-  operations: {UpdateUserBookRead: 'UPDATE', AddUserBookRead: 'ADD'},
+  operations: {UpdateUserBookRead: 'UPDATE', AddUserBookRead: 'ADD', UpdateUserBook: 'UPDATE_BOOK'},
 }));
 
 const ITEM: ReadingItem = {
@@ -145,12 +145,24 @@ test('an SDK failure reaches the caller with its status (the 401 stop and the 42
 
 test('fetchBookDetail adds an edition that only the reader uses, once', async () => {
   mockSdk.books.get.mockResolvedValue({title: 'T'});
-  mockSdk.books.editions.mockResolvedValue({items: [{id: 1}, {id: 2}]});
+  mockSdk.books.editions.mockResolvedValue({items: [{id: 1}, {id: 2}], hasMore: false});
   mockSdk.books.edition.mockImplementation(async (id: number) => ({id}));
   const book = await fetchBookDetail('T', 5, [2, 300]);
   expect(book.editions.map(e => e.id)).toEqual([1, 2, 300]);
   expect(mockSdk.books.edition).toHaveBeenCalledTimes(1);
+  expect(mockSdk.books.editions).toHaveBeenCalledTimes(1);
   expect(mockSdk.books.editions).toHaveBeenCalledWith(5, {limit: 100});
+});
+
+test('fetchBookDetail loads further editions pages up to 300', async () => {
+  mockSdk.books.get.mockResolvedValue({title: 'T'});
+  mockSdk.books.editions.mockImplementation(async (_id: number, o: {offset?: number}) => ({
+    items: Array.from({length: 100}, (_x, i) => ({id: (o.offset ?? 0) + i})),
+    hasMore: true,
+  }));
+  const book = await fetchBookDetail('T', 5);
+  expect(book.editions).toHaveLength(300);
+  expect(mockSdk.books.editions).toHaveBeenLastCalledWith(5, {limit: 100, offset: 200});
 });
 
 test('fetchBookDetail throws for an unknown book and skips editions that no longer exist', async () => {
@@ -203,6 +215,41 @@ test("an OAuth session is passed to the SDK as auth, not as a token", async () =
   expect(mockSdk.options).toMatchObject({auth: session, pace: false, maxRetries: 0});
   expect(mockSdk.options).not.toHaveProperty("token");
 });
+
+describe('saveReview', () => {
+  const REVIEW = {markdown: ' great ', hasSpoilers: true, sponsored: false, notes: ' mine '};
+  test('one UpdateUserBook request with the review fields; sponsored only when set', async () => {
+    mockSdk.request.mockResolvedValue({});
+    await saveReview('T', 7, {...REVIEW, rating: 4.5});
+    expect(mockSdk.request).toHaveBeenLastCalledWith('UPDATE_BOOK', {
+      id: 7,
+      object: {rating: 4.5, review_markdown: 'great', review_has_spoilers: true, private_notes: 'mine'},
+    });
+    await saveReview('T', 7, {...REVIEW, sponsored: true});
+    expect(mockSdk.request.mock.calls.at(-1)![1].object).toEqual({review_markdown: 'great', review_has_spoilers: true, sponsored_review: true, private_notes: 'mine'});
+  });
+
+  test('empty text and bad ratings are refused before any request', async () => {
+    mockSdk.request.mockClear();
+    await expect(saveReview('T', 7, {...REVIEW, markdown: '  '})).rejects.toThrow(/empty/);
+    await expect(saveReview('T', 7, {...REVIEW, rating: 4.3})).rejects.toThrow(/rating/);
+    expect(mockSdk.request).not.toHaveBeenCalled();
+  });
+
+  test('fetchReview maps the entry for prefilling', async () => {
+    mockSdk.library.get = jest.fn().mockResolvedValue({reviewMarkdown: null, reviewHasSpoilers: true, privateNotes: 'n', rating: 3.5});
+    expect(await fetchReview('T', 7)).toEqual({markdown: '', hasSpoilers: true, notes: 'n', rating: 3.5});
+  });
+});
+
+test("an OAuth session is passed to the SDK as auth, not as a token", async () => {
+  const session = {getAccessToken: async () => "hc_at_1"};
+  mockSdk.library.list = jest.fn().mockResolvedValue({items: [], hasMore: false});
+  await fetchUserBooks(session);
+  expect(mockSdk.options).toMatchObject({auth: session, pace: false, maxRetries: 0});
+  expect(mockSdk.options).not.toHaveProperty("token");
+});
+
 
 describe('fetchReviews', () => {
   const { fetchReviews } = require('../src/hardcover');

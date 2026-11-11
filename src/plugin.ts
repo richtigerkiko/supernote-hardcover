@@ -8,7 +8,7 @@ import {name as appName} from '../app.json';
 import {PluginManager, PluginCommAPI, PluginDocAPI, NativeUIUtils} from 'sn-plugin-lib';
 import {OAuthSession, SignedOutError, type TokenSet} from '@hardcover/sdk/oauth';
 import CLIENT_ID from './clientId.generated'; // written from the workspace .env by scripts/write-client-id.js
-import {fileTokenStore, SCOPES} from './auth';
+import {fileTokenStore, hasScope, SCOPES} from './auth';
 import {parseEpub} from './epub';
 import {isbnsIn} from './match';
 import {buildDetail, STATUS_ID, withEdition} from './detail';
@@ -26,6 +26,8 @@ import {
   fetchReviews,
   fetchUserBooks,
   saveJournal,
+  saveReview,
+  fetchReview,
   saveProgress,
   searchBooks,
   setStatus,
@@ -341,7 +343,6 @@ const syncNote = (path: string): string => {
 };
 let signInAbort: AbortController | null = null; // the sign-in that is waiting for its approval, if any
 let loadSeq = 0; // a slow load must not overwrite `current` after a newer one
-const dialogOk = (tip: string) => dialog(tip, 'OK', 'Close', false).catch(() => {});
 const api: SessionApi = {
   // -> {book} for DetailPage, or {message} when there is nothing to show
   async load() {
@@ -449,7 +450,27 @@ const api: SessionApi = {
     dropReadingList(); // the list is fetched again so the new status shows
     tracker.forget(c.path);
   },
-  writeReview: () => dialogOk('Writing a review from the device is not available yet.').then(() => {}),
+  // Sign-ins stored before write:reviews was asked for cannot save a review: offer a new sign-in instead of failing at Save.
+  async writeReview() {
+    const c = current;
+    if (!c) throw new Error('no book loaded');
+    if (!c.item.userBookId) throw new Error('add the book to your library first');
+    if (hasScope((await oauth.tokens())?.scope, 'write:reviews')) {
+      const r = await fetchReview(oauth, c.item.userBookId);
+      return {markdown: r.markdown, hasSpoilers: r.hasSpoilers, sponsored: false, notes: r.notes, ...(r.rating ? {rating: r.rating} : {})};
+    }
+    if (!(await dialog('Writing reviews needs a new sign-in with more access. Sign in again now?', 'Cancel', 'Sign in', false))) throw new Error('Reviews need a new sign-in.');
+    await oauth.signOut();
+    return false;
+  },
+  async saveReview(r) {
+    const c = current;
+    if (!c) throw new Error('no book loaded');
+    if (!c.item.userBookId) throw new Error('add the book to your library first');
+    await needPermissions();
+    await saveReview(oauth, c.item.userBookId, r);
+    log('review saved for', c.item.title);
+  },
   async loadReviews(offset) {
     const c = current;
     if (!c) throw new Error('no book loaded');
