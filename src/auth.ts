@@ -3,9 +3,9 @@
 import type {TokenSet, TokenStore} from '@hardcover/sdk/oauth';
 import type {JsonFile} from './store';
 
-// What the plugin's calls need (scopes per SDK resource): library and reads, the Owned list, catalogue lookups, journal.
+// What the plugin's calls need (scopes per SDK resource): library and reads, marking an edition owned, catalogue lookups, journal.
 // Review writes (write:reviews) are not used yet.
-export const SCOPES = ['read:me:content', 'read:library', 'write:library', 'read:lists', 'read:catalog'] as const;
+export const SCOPES = ['read:me:content', 'read:library', 'write:library', 'read:catalog'] as const;
 
 // Tokens in a JsonFile (the plugin's private directory). Reads hand out copies so the session never sees a stored
 // object change under it. Without the native module the tokens live in memory and a restart signs out.
