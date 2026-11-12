@@ -1,36 +1,86 @@
-# supernote-hardcover (Supernote plugin)
+# Hardcover for Supernote
 
-Keeps your [Hardcover](https://hardcover.app) reading progress up to date while you read EPUBs in DOC on a Supernote. Switch it on for a book, then just read.
+[![Latest release](https://img.shields.io/github/v/release/richtigerkiko/supernote-hardcover)](https://github.com/richtigerkiko/supernote-hardcover/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/richtigerkiko/supernote-hardcover)](LICENSE)
 
-It runs fully on the device. The only network traffic is to the Hardcover API.
+A Supernote plugin that keeps your [Hardcover](https://hardcover.app) reading progress up to date while you read EPUBs. Switch it on for a book, then just read. It also puts the book's Hardcover page on your device, and saves quotes, notes and reviews.
 
-## What it does
+It runs fully on the device. The only network traffic is to Hardcover.
 
-- **Tracks the book you have open.** Every page turn is sent, forwards or backwards, at most once every 10 seconds; pages turned in between go out with the next touch after that.
-- **Finds the book by itself.** Title, author and ISBN come from the EPUB's metadata, not the filename, and are matched against your Hardcover library.
-- **Uses your edition.** Pick the edition you own and page counts are computed against it. Font size and orientation changes don't matter.
-- **Off by default, per book.** A Tracking toggle on each book's page decides what gets sent.
-- **Book page.** The **Hardcover** toolbar button opens a full-screen page with progress, cover, genres, moods and tags, the description, your reading status and the edition picker. It also shows the last sync, or the error if there was one.
-- **Quotes and notes.** Select text, then tap the plugin's button in the selection toolbar. A card saves the passage as a quote (with your thoughts under it if you add any) or a note to your Hardcover reading journal, on the page you are at. Entries are private unless you choose otherwise.
+<p>
+  <img src="docs/images/book-page.png" width="200" alt="The book page: cover, edition, progress, genres and description">
+  <img src="docs/images/editions.png" width="200" alt="Choosing the edition">
+  <img src="docs/images/quote.png" width="200" alt="Saving a selected passage as a quote">
+  <img src="docs/images/review.png" width="200" alt="Writing a review with a star rating">
+</p>
+
+## Features
+
+- **Progress tracking.** Page turns in the open EPUB are sent to Hardcover, forwards and backwards, at most once every 10 seconds per book.
+- **Finds the book by itself.** Title, author and ISBN come from the EPUB's metadata, not the filename, and are matched against your Hardcover library, then the whole Hardcover catalogue.
+- **Uses your edition.** Pick the edition you own and page numbers are computed against it. Font size and orientation don't matter.
+- **Off by default, per book.** A Tracking switch on each book's page decides whether your progress is sent.
+- **Book page.** Cover, rating, progress, genres, moods, tags and description, other readers' reviews, and your own journal for the book.
+- **Quotes and notes.** Select text and save it as a quote (with your thoughts, if you like) or write a note. Both go to your Hardcover reading journal with the page you are on. You can edit and remove them from the Journal tab.
+- **Status and review.** Change the reading status, rate the book and write a review.
+
+## Requirements
+
+- A Supernote with plugin support. Only the **Nomad** has been tested; other models may work and reports are welcome ([#38](https://github.com/richtigerkiko/supernote-hardcover/issues/38)).
+- A [Hardcover](https://hardcover.app) account.
+- Wi-Fi while you read, for the updates to go out.
+- Books as EPUB files.
 
 ## Install
 
-Copy `supernote-hardcover.snplg` to the device's `MyStyle` folder, then Settings > Apps > Plugins > Add Plugin and select it. Open an EPUB, tap **Hardcover**, and turn Tracking on.
+1. Download `supernote-hardcover.snplg` from the [latest release](https://github.com/richtigerkiko/supernote-hardcover/releases/latest).
+2. Copy it into the `MyStyle` folder on your Supernote (for example over USB).
+3. On the Supernote, open **Settings > Apps > Plugins > Select Plugin Package**, select the file and tap **Install**.
+4. Open an EPUB, tap the **Plugins** icon (the puzzle piece) in the toolbar and choose **Hardcover**. Allow file and internet access if the device asks.
+5. Tap **Sign in**. The page shows a link, a code and a QR code. Scan the QR code with your phone (or open the link on any device and type the code), log in to Hardcover and approve. The Supernote continues by itself.
+6. On the book's page, switch **Tracking** on. That's it: keep reading.
 
-## Build from source
+To update, install a newer package the same way. To remove the plugin, use **Uninstall** on its page under Settings > Apps > Plugins.
 
-Needs Node, JDK 17 and the Android SDK (platform 35, build-tools 35.0.0, NDK 27.1.12297006), and your Hardcover OAuth client id (a public client with the device grant) as the environment variable `HARDCOVER_OAUTH_CLIENT_ID`, or in a `.env` file in the repo root.
+## Usage
 
-```powershell
-npm install
-npm run build   # writes build\outputs\supernote-hardcover.snplg
-npm test
-```
+**Tracking.** Tracking is per book and starts off. Once it is on, you don't need to press anything: progress follows your page turns. **Plugins > Hardcover** opens the book's page with the current progress; if a sync failed, the reason is shown under the progress bar.
 
-No token is bundled: open the Hardcover page on the device and sign in with the code it shows.
+**Books not in your library.** If the open book is not in your Hardcover library, the plugin looks it up in the Hardcover catalogue and asks once whether to add it (as Want to Read, with your copy marked as owned). If you say no, the book page and the journal still work, and an **Add to library** button replaces tracking and status.
 
-## Notes
+**Edition.** Tap **Change** next to the edition to pick the one you are reading. Progress is sent as a page of that edition. Editions without a page count are not listed.
 
-- EPUB only. PDFs are not supported yet.
-- Tracking follows your touches, not a timer, so a page turned at the last tap is reported at your next touch.
-- How it works, measurements from the device and build details are in [CLAUDE.md](CLAUDE.md).
+**Quotes and notes.** Select text in the book, then tap the Hardcover icon (a book with a star) in the selection toolbar. Choose **Quote** to save the passage, optionally with your thoughts, or **Note** to write a note without the passage. Each entry has its own privacy setting (Public, Follows, Private) and is **Private** unless you change it.
+
+**Status.** The button at the bottom left of the book page changes the reading status.
+
+**Review.** **Write review** opens a form with a star rating (half stars by dragging), the review text, a spoiler flag and private notes.
+
+## Troubleshooting and limits
+
+- **EPUB only.** PDFs and other formats are not supported yet ([#16](https://github.com/richtigerkiko/supernote-hardcover/issues/16)).
+- **Progress is one touch behind.** The plugin learns about a page turn at your next touch of the screen, and sends at most one update every 10 seconds. The last page you turned before putting the device down goes out when you touch it again.
+- **"This book is not in your Hardcover library."** Hardcover's catalogue has no match for the title, author or ISBN in the file. Check the EPUB's metadata (for example with Calibre), or add the book on hardcover.app first.
+- **"Could not read this EPUB's title and author."** The file has no usable metadata. Fix it with Calibre and copy the file again.
+- **"Hardcover has no edition with a page count for this book."** Progress needs a page count. Add one to an edition on hardcover.app.
+- **"Signed out, tracking stopped"**, or a message that the sign-in has expired: open Plugins > Hardcover and sign in again, then check that Tracking is still on.
+- **"This version needs a new sign-in with more access."** A newer version uses more of Hardcover's API than you approved earlier. Sign in again.
+- **Nothing arrives on Hardcover.** Check Wi-Fi, that Tracking is on for this book, and the line under the progress bar on the book page.
+- **"This plugin version is too low."** The device already has the same or a newer version installed.
+
+## Privacy
+
+- The plugin talks only to Hardcover (`hardcover.app` and its API and image servers). There is no other server, no analytics and no telemetry.
+- You sign in on Hardcover's own site. The plugin never sees your password; it stores the access tokens Hardcover issues in its private folder on the device, and nowhere else.
+- It reads the title, author and ISBN from the EPUB you have open. Book files and their text never leave the device, except a passage you choose to save as a quote.
+- Opening the Hardcover page looks the book up (by ISBN, title and author) in your library and in Hardcover's catalogue. No reading progress is sent for a book until you switch Tracking on. Progress updates then appear on Hardcover like any other progress update, with your account's privacy setting. Quotes and notes are private unless you choose otherwise.
+
+## Contributing
+
+Build instructions, the code layout and the release flow are in [docs/developer.md](docs/developer.md). Bug reports and reports from other Supernote models are welcome in the [issues](https://github.com/richtigerkiko/supernote-hardcover/issues).
+
+## License
+
+[MIT](LICENSE)
+
+This is an independent, community-made plugin. It is not affiliated with or endorsed by Hardcover or by Ratta (Supernote).
