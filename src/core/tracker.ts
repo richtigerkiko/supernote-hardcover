@@ -32,7 +32,7 @@ interface Tracked {
 
 export interface TrackerDeps {
   resolve: (path: string) => Promise<ReadingItem | null>;
-  push: (item: ReadingItem, pages: number, path: string) => Promise<void>;
+  push: (item: ReadingItem, pages: number) => Promise<void>;
   now?: () => number;
 }
 
@@ -76,7 +76,7 @@ export function createTracker({resolve, push, now = Date.now}: TrackerDeps) {
       const item = b.item; // a re-check can null b.item while a slow push is still hanging
       if (!item) continue;
       try {
-        await push(item, p, path);
+        await push(item, p);
         b.pages = p;
         b.pending = null;
         b.retryAt = now() + PUSH_INTERVAL_MS;

@@ -39,19 +39,12 @@ export function createTracking(d: {
       return item;
     },
     // One user_books row per push, for the current read (a finished one is not touched, see saveProgress).
-    push: async (item, pages, path) => {
+    push: async (item, pages) => {
       await d.grants.needGranted();
       log('push', item.title, pages);
       try {
         const fresh = await d.hc.fetchUserBook(d.auth, item.userBookId);
-        if (!fresh) {
-          // Gone, or the saved ids belong to another account (signed in again): drop them so the next touch looks the book up.
-          const m = await d.meta.get(path);
-          delete m.book;
-          await d.meta.save(path, m);
-          tracker.forget(path);
-          throw new Error('the book is no longer in your library');
-        }
+        if (!fresh) throw new Error('the book is no longer in your library');
         const read = fresh.read && {...fresh.read, edition_id: item.editionId}; // the file's edition, not the entry's
         await d.hc.saveProgress(d.auth, {...item, read}, pages);
       } catch (e) {

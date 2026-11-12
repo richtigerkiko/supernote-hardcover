@@ -39,16 +39,3 @@ test('a tracked book pushes through one row refresh, with the saved ids and no l
   expect(t.hc.saveProgress.mock.calls[0][1]).toMatchObject({userBookId: 9, read: {id: 4, edition_id: 5}});
   expect(t.hc.saveProgress.mock.calls[0][2]).toBe(82);
 });
-
-test('a saved row that is gone drops the saved ids so the next touch looks the book up again', async () => {
-  const files = {[PATH]: {...ON}};
-  const t = setup(files, null);
-  t.tr.onTouch();
-  await flush();
-  t.goTo(40);
-  t.tr.onTouch();
-  await flush();
-  expect(t.hc.saveProgress).not.toHaveBeenCalled();
-  expect(files[PATH].book).toBeUndefined();
-  expect(t.tr.syncNote(PATH)).toContain('no longer in your library');
-});
