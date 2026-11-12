@@ -1,6 +1,7 @@
 import React, {useState} from 'react';
 import {Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
-import type {Edition} from './DetailPage';
+import type {Edition} from '../core/types';
+import {BLACK, WHITE, shared} from './theme';
 
 // Full-screen "Choose edition" list, shared by the detail page and the journal page. Same e-ink rules as DetailPage.
 
@@ -90,20 +91,17 @@ export default function EditionPicker({editions, editionId, onPick, onClose}: Pr
   );
 }
 
-const BLACK = '#000000';
-const WHITE = '#ffffff';
-
 const styles = StyleSheet.create({
   page: {flex: 1, backgroundColor: WHITE},
-  topBar: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 20, paddingRight: 64, height: 68, borderBottomWidth: 2, borderColor: BLACK}, // right gap: the host's floating home button sits there
-  close: {width: 56, height: 56, alignItems: 'center', justifyContent: 'center'},
-  closeText: {fontSize: 28, color: BLACK},
+  topBar: shared.topBar,
+  close: shared.close,
+  closeText: shared.closeText,
   title: {fontSize: 20, color: BLACK, marginRight: 12},
   l1: {fontSize: 21, fontWeight: '700', color: BLACK},
   l2: {fontSize: 19, color: BLACK},
-  actions: {flexDirection: 'row', paddingVertical: 16, paddingLeft: 16, paddingRight: 2, borderTopWidth: 2, borderColor: BLACK},
-  action: {flex: 1, height: 68, borderWidth: 3, borderColor: BLACK, alignItems: 'center', justifyContent: 'center', marginRight: 14},
-  actionText: {fontSize: 24, fontWeight: '700', color: BLACK},
+  actions: shared.actions,
+  action: shared.action,
+  actionText: shared.actionText,
   search: {fontSize: 21, color: BLACK, height: 60, marginHorizontal: 16, marginVertical: 10, paddingHorizontal: 14, borderWidth: 3, borderColor: BLACK},
   pickNote: {fontSize: 19, lineHeight: 25, paddingVertical: 14, paddingHorizontal: 24, borderBottomWidth: 2, borderColor: BLACK, color: BLACK},
   item: {flexDirection: 'row', alignItems: 'center', minHeight: 88, paddingVertical: 10, paddingHorizontal: 24, borderBottomWidth: 2, borderColor: BLACK, backgroundColor: WHITE},

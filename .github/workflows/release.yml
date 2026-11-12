@@ -26,14 +26,20 @@ jobs:
           [ -n "$v" ] || echo "no releasing commits (feat, fix, perf, breaking), skipping"
       - if: steps.ver.outputs.version != ''
         uses: actions/setup-node@v4
-        with: { node-version: 20, cache: npm }
+        with: { node-version: 20 }
       - if: steps.ver.outputs.version != ''
         uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: 17, cache: gradle }
+        with: { distribution: temurin, java-version: 17 }
       - if: steps.ver.outputs.version != ''
+        uses: gradle/actions/setup-gradle@v4
+      - if: steps.ver.outputs.version != ''
+        id: nm
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - if: steps.ver.outputs.version != '' && steps.nm.outputs.cache-hit != 'true'
         run: npm ci
-      - if: steps.ver.outputs.version != ''
-        run: npx jest
       - if: steps.ver.outputs.version != ''
         name: Stamp version
         run: |
@@ -56,8 +62,11 @@ jobs:
         env:
           HARDCOVER_OAUTH_CLIENT_ID: ${{ secrets.HARDCOVER_OAUTH_CLIENT_ID }}
         run: |
+          # jest runs alongside the build; a failure still stops the release
+          npx jest & jest_pid=$!
           node scripts/write-client-id.js
           bash scripts/buildPlugin.sh
+          wait $jest_pid
       - if: steps.ver.outputs.version != ''
         name: Publish release
         env:

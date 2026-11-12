@@ -1,45 +1,13 @@
 import React, {useEffect, useState} from 'react';
-import type {PublicReview} from '../hardcover'; // type only: this file stays SDK-free at runtime
+import {STATUSES, type BookDetail, type PublicReview} from '../core/types';
 import {Image, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import EditionPicker, {Item, TopBar} from './EditionPicker';
+import {BLACK, WHITE, shared} from './theme';
 
 // Book detail page, ported from the design artifact. Presentational only: no SDK imports, everything arrives as props,
 // so it can be designed on the emulator with mock data and unit tested. E-ink rules: black on white, no animation,
 // borders instead of greys, tap targets of at least 48 dp, text of at least 18 sp. The status list and the edition
 // list are full-screen views inside this component (the Nomad ignores a smaller window for a plugin view).
-
-export type Edition = {
-  id: string;
-  format: string;
-  publisher: string;
-  year?: number | null;
-  pages: number;
-  lang: string;
-  isbn?: string;
-  audio?: boolean;
-};
-
-export type BookDetail = {
-  title: string;
-  subtitle?: string | null;
-  authors: string[];
-  cover?: string | null;
-  rating?: number | null; // 0-5
-  ratingsCount?: number;
-  inLibrary?: boolean; // false: not on the reader's shelves, so no status and no tracking, only an Add to library button
-  status: string; // one of STATUSES
-  progress: number; // reading position, 0-1 of the book; the page shown follows the chosen edition
-  genres: string[];
-  moods: string[];
-  tags: string[];
-  description?: string | null;
-  editions: Edition[];
-  editionId: string; // the chosen edition
-  editionSaved: boolean; // false: our best guess, not confirmed by the reader
-  editionIsbn?: boolean; // the file's own ISBN names this edition
-};
-
-export const STATUSES = ['Want to read', 'Currently reading', 'Paused', 'Did not finish', 'Finished'];
 
 type Props = {
   book: BookDetail;
@@ -414,15 +382,12 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
   );
 }
 
-const BLACK = '#000000';
-const WHITE = '#ffffff';
-
 const styles = StyleSheet.create({
   page: {flex: 1, backgroundColor: WHITE},
-  topBar: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 20, paddingRight: 64, height: 68, borderBottomWidth: 2, borderColor: BLACK}, // right gap: the host's floating home button sits there
-  close: {width: 56, height: 56, alignItems: 'center', justifyContent: 'center'},
+  topBar: shared.topBar,
+  close: shared.close,
   logo: {width: 120, height: 26, resizeMode: 'contain', marginLeft: 4, marginRight: 'auto', marginTop: 6},
-  closeText: {fontSize: 28, color: BLACK},
+  closeText: shared.closeText,
   trackingBox: {flexDirection: 'row', alignItems: 'center'},
   trackingLabel: {fontSize: 20, color: BLACK, marginRight: 12},
   toggle: {width: 92, height: 48, borderWidth: 3, borderColor: BLACK, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: WHITE},
@@ -486,7 +451,7 @@ const styles = StyleSheet.create({
   rvFull: {marginTop: 12},
   pill: {borderWidth: 1.5, borderColor: BLACK, borderRadius: 14, paddingHorizontal: 9, height: 26, justifyContent: 'center', marginRight: 6},
   pillText: {fontSize: 18, color: BLACK, includeFontPadding: false},
-  actions: {flexDirection: 'row', paddingVertical: 16, paddingLeft: 16, paddingRight: 2, borderTopWidth: 2, borderColor: BLACK},
-  action: {flex: 1, height: 68, borderWidth: 3, borderColor: BLACK, alignItems: 'center', justifyContent: 'center', marginRight: 14},
-  actionText: {fontSize: 24, fontWeight: '700', color: BLACK},
+  actions: shared.actions,
+  action: shared.action,
+  actionText: shared.actionText,
 });

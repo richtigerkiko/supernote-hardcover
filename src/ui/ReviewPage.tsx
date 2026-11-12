@@ -1,12 +1,10 @@
 import React, {useRef, useState} from 'react';
 import {PanResponder, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
-import type {BookDetail} from './DetailPage';
+import {BLANK_REVIEW, type BookDetail, type Review} from '../core/types';
+import {BLACK, WHITE, shared} from './theme';
 
 // Review card, presentational like JournalPage: no SDK, everything arrives as props.
 // Same e-ink rules: black on white, borders instead of greys, tap targets of at least 48 dp, text of at least 18 sp.
-
-export type Review = {markdown: string; hasSpoilers: boolean; sponsored: boolean; notes: string; rating?: number};
-export const BLANK_REVIEW: Review = {markdown: '', hasSpoilers: false, sponsored: false, notes: ''};
 
 type Props = {
   book: BookDetail;
@@ -178,17 +176,14 @@ export default function ReviewPage({book, initial = BLANK_REVIEW, onSave, onClos
   );
 }
 
-const BLACK = '#000000';
-const WHITE = '#ffffff';
-
 const styles = StyleSheet.create({
   root: {flex: 1, alignItems: 'center', paddingTop: 24, paddingHorizontal: 24, paddingBottom: 24, backgroundColor: 'transparent'},
   card: {width: '100%', maxWidth: 701, flexShrink: 1, borderWidth: 3, borderColor: BLACK, backgroundColor: WHITE},
   body: {padding: 24, gap: 16},
   header: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
   heading: {fontSize: 22, fontWeight: '700', color: BLACK},
-  close: {width: 56, height: 56, borderWidth: 3, borderColor: BLACK, alignItems: 'center', justifyContent: 'center'},
-  closeText: {fontSize: 28, color: BLACK},
+  close: shared.closeBox,
+  closeText: shared.closeText,
   stars: {flexDirection: 'row', height: 64},
   star: {flex: 1, height: 64, alignItems: 'center', justifyContent: 'center'},
   starGlyph: {fontSize: 52, lineHeight: 64, color: BLACK},

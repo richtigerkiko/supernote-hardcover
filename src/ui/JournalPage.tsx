@@ -1,13 +1,11 @@
 import React, {useState} from 'react';
 import {Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
-import type {BookDetail} from './DetailPage';
+import type {BookDetail, Entry, Privacy} from '../core/types';
+import {BLACK, WHITE, shared} from './theme';
 import EditionPicker, {edLine1} from './EditionPicker';
 
 // Journal entry card (quote or note), presentational like DetailPage: no SDK, everything arrives as props.
 // Same e-ink rules: black on white, borders instead of greys, tap targets of at least 48 dp, text of at least 18 sp.
-
-type Privacy = 1 | 2 | 3;
-export type Entry = {event: 'quote' | 'note'; passage: string; text: string; privacy: Privacy};
 
 type Props = {
   book: BookDetail;
@@ -186,9 +184,6 @@ export default function JournalPage({book, passage, onSetEdition, onSave, onClos
   );
 }
 
-const BLACK = '#000000';
-const WHITE = '#ffffff';
-
 const styles = StyleSheet.create({
   // transparent: if the host shows the page behind the view the card floats over it, else it sits on white
   root: {flex: 1, alignItems: 'center', paddingTop: 24, paddingHorizontal: 24, paddingBottom: 24, backgroundColor: 'transparent'},
@@ -196,8 +191,8 @@ const styles = StyleSheet.create({
   body: {padding: 24, gap: 16},
   header: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
   heading: {fontSize: 22, fontWeight: '700', color: BLACK},
-  close: {width: 56, height: 56, borderWidth: 3, borderColor: BLACK, alignItems: 'center', justifyContent: 'center'},
-  closeText: {fontSize: 28, color: BLACK},
+  close: shared.closeBox,
+  closeText: shared.closeText,
   segments: {flexDirection: 'row', borderWidth: 3, borderColor: BLACK},
   segment: {flex: 1, height: 56, alignItems: 'center', justifyContent: 'center', backgroundColor: WHITE},
   segmentGap: {borderLeftWidth: 3, borderColor: BLACK},
