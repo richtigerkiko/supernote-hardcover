@@ -1,7 +1,7 @@
 import type {OAuthSession} from '@hardcover/sdk/oauth';
 import {isbnsIn} from '../core/match';
 import {joinEntry, journalEntry, journalPosition, splitEntry} from '../core/journal';
-import type {BookDetail, Grants, ReadingItem, Sample} from '../core/types';
+import {NOT_READING, notTracked, type BookDetail, type Grants, type ReadingItem, type Sample} from '../core/types';
 import {log, withTimeout} from '../core/util';
 import {hasScope, SCOPES} from '../hardcover/auth';
 import {buildDetail, STATUS_ID, withEdition} from './detail';
@@ -24,11 +24,15 @@ export interface ApiDeps {
 
 // The functions the page calls (through src/page/session.ts, same JS runtime as the page).
 export function createApi({auth, hc, meta, library, tracking, grants, dialog, session, sample}: ApiDeps): SessionApi {
-  let current: {path: string; item: ReadingItem; detail: BookDetail; sample: Sample; editionId: string} | null = null; // the book the page was opened on
+  let current: {path: string; item: ReadingItem; detail: BookDetail; sample: Sample; editionId: string; idle: string} | null = null; // the book the page was opened on
   let asking: string | null = null; // the file the book search or the edition picker is open for
   let signInAbort: AbortController | null = null; // the sign-in that is waiting for its approval, if any
   let askedScopes = false; // the missing-scopes dialog in load() was shown (not again until a restart, so a scope the server never grants cannot loop)
   let loadSeq = 0; // a slow load must not overwrite `current` after a newer one
+
+  // The sync line, computed in one place: a tracking problem first, else why a tracked book is not written (`idle`,
+  // from notTracked).
+  const note = (path: string, on: boolean, idle: string) => tracking.syncNote(path) || (on ? idle : '');
 
   const needBook = () => {
     if (!current) throw new Error('no book loaded');
@@ -94,9 +98,10 @@ export function createApi({auth, hc, meta, library, tracking, grants, dialog, se
         item = withEdition(item, m.edition) ?? item;
       }
       detail.editionSaved = true;
-      if (mine === loadSeq) current = {path: s.path, item, detail, sample: s, editionId: detail.editionId};
+      const idle = notTracked(item);
+      if (mine === loadSeq) current = {path: s.path, item, detail, sample: s, editionId: detail.editionId, idle};
       if (!detail.inLibrary) return {book: detail, tracking: false, sync: 'Not in your library: tracking and status are off.'};
-      return {book: detail, tracking: m.tracking === true, sync: tracking.syncNote(s.path)};
+      return {book: detail, tracking: m.tracking === true, sync: note(s.path, m.tracking === true, idle)};
     },
     // Device grant (RFC 8628): onCode shows the page where to type the code. Resolves true once the account approved it,
     // false when the attempt was cancelled (see signInAbort).
@@ -157,6 +162,7 @@ export function createApi({auth, hc, meta, library, tracking, grants, dialog, se
       await meta.save(c.path, m);
       tracking.tracker.forget(c.path);
       log(on ? 'tracking on for' : 'tracking off for', c.item.title);
+      return note(c.path, on, c.idle); // the page is not reloaded: this is its new sync line
     },
     // The edition is remembered per file in the metadata cache and used for the pages we compute from now on.
     async setEdition(editionId) {
@@ -193,17 +199,20 @@ export function createApi({auth, hc, meta, library, tracking, grants, dialog, se
     },
     async setStatus(label) {
       const c = needLibraryBook(); // a newer load may replace `current` while we wait
+      const statusId = STATUS_ID[label as keyof typeof STATUS_ID];
       await grants.need();
-      await hc.setStatus(auth, c.item.userBookId, STATUS_ID[label as keyof typeof STATUS_ID]);
+      await hc.setStatus(auth, c.item.userBookId, statusId);
       library.drop(); // the list is fetched again so the new status shows
       tracking.tracker.forget(c.path);
+      c.idle = statusId === 2 ? '' : NOT_READING; // a change to Currently Reading starts a read (if it was that already, the next push says NO_READ)
+      return note(c.path, (await meta.get(c.path)).tracking === true, c.idle);
     },
     // Sign-ins stored before write:reviews was asked for cannot save a review: offer a new sign-in instead of failing at Save.
     async writeReview() {
       const c = needLibraryBook();
       if (await ensureScope('write:reviews', 'Writing reviews')) {
         const r = await hc.fetchReview(auth, c.item.userBookId);
-        return {markdown: r.markdown, hasSpoilers: r.hasSpoilers, sponsored: false, notes: r.notes, ...(r.rating ? {rating: r.rating} : {})};
+        return {markdown: r.markdown, hasSpoilers: r.hasSpoilers, sponsored: r.sponsored, notes: r.notes, ...(r.rating ? {rating: r.rating} : {})};
       }
       return false; // signed out to ask for the scope, reload shows Sign in
     },

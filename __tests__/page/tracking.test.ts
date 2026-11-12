@@ -1,10 +1,11 @@
 import {createTracking} from '../../src/page/tracking';
 import type {FileMeta} from '../../src/core/store';
+import {NO_READ, NOT_READING} from '../../src/core/types';
 
 const PATH = '/b.epub';
 const flush = () => new Promise<void>(r => setTimeout(r, 0));
 
-function setup(files: Record<string, FileMeta>, row: any = {userBookId: 9, bookId: 5, title: 'Dune', read: {id: 4, started_at: 's', finished_at: null, progress_pages: 10, edition_id: 77}}) {
+function setup(files: Record<string, FileMeta>, row: any = {userBookId: 9, bookId: 5, statusId: 2, title: 'Dune', read: {id: 4, started_at: 's', finished_at: null, progress_pages: 10, edition_id: 77}}) {
   const meta: any = {anyTracked: jest.fn(async () => Object.values(files).some(m => m.tracking)), get: jest.fn(async (p: string) => files[p]), save: jest.fn(async () => {})};
   const hc: any = {fetchUserBook: jest.fn(async () => row), saveProgress: jest.fn(async () => {})};
   const library: any = {resolvePath: jest.fn(async () => null)};
@@ -36,8 +37,31 @@ test('a tracked book pushes through one row refresh, with the saved ids and no l
   expect(t.hc.fetchUserBook).toHaveBeenCalledTimes(1);
   expect(t.hc.fetchUserBook).toHaveBeenCalledWith({}, 9);
   // the file's edition (5) goes on the read, not the one the entry has (77)
-  expect(t.hc.saveProgress.mock.calls[0][1]).toMatchObject({userBookId: 9, read: {id: 4, edition_id: 5}});
+  // and the status the row has now, not the 0 of the saved ids
+  expect(t.hc.saveProgress.mock.calls[0][1]).toMatchObject({userBookId: 9, statusId: 2, read: {id: 4, edition_id: 5}});
   expect(t.hc.saveProgress.mock.calls[0][2]).toBe(82);
+});
+
+test('a book that is not Currently Reading is not pushed: the sync line says why, the grant stays, and forget clears it', async () => {
+  const t = setup({[PATH]: ON});
+  t.hc.saveProgress.mockRejectedValue(new Error(NOT_READING));
+  t.tr.onTouch();
+  await flush();
+  t.goTo(40);
+  t.tr.onTouch();
+  await flush();
+  expect(t.tr.syncNote(PATH)).toBe(NOT_READING);
+  expect(t.grants.revoke).not.toHaveBeenCalled();
+  t.tr.tracker.forget(PATH); // what the status picker does
+  expect(t.tr.syncNote(PATH)).toBe('');
+  t.hc.saveProgress.mockRejectedValue(new Error(NO_READ));
+  t.tr.onTouch();
+  await flush();
+  t.goTo(60);
+  t.tr.onTouch();
+  await flush();
+  expect(t.tr.syncNote(PATH)).toBe(NO_READ);
+  expect(t.grants.revoke).not.toHaveBeenCalled();
 });
 
 test('an entry from before the saved ids is looked up once and the ids go into the cached object', async () => {

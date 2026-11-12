@@ -1,6 +1,6 @@
 import {SignedOutError, type OAuthSession} from '@hardcover/sdk/oauth';
 import {createTracker} from '../core/tracker';
-import type {Grants, Sample} from '../core/types';
+import {NO_READ, NOT_READING, type Grants, type Sample} from '../core/types';
 import {log} from '../core/util';
 import type {Client, Dialog, Library} from './library';
 import type {Meta} from './meta';
@@ -43,7 +43,8 @@ export function createTracking(d: {
       }
       return item;
     },
-    // One user_books row per push, for the current read (a finished one is not touched, see saveProgress).
+    // One user_books row per push, for its status and its read in progress. saveProgress writes only for a Currently
+    // Reading book with such a read; otherwise it throws why (NOT_READING, NO_READ), which shows in the sync line and is tried again later.
     push: async (item, pages) => {
       await d.grants.needGranted();
       log('push', item.title, pages);
@@ -51,9 +52,9 @@ export function createTracking(d: {
         const fresh = await d.hc.fetchUserBook(d.auth, item.userBookId);
         if (!fresh) throw new Error('the book is no longer in your library');
         const read = fresh.read && {...fresh.read, edition_id: item.editionId}; // the file's edition, not the entry's
-        await d.hc.saveProgress(d.auth, {...item, read}, pages);
+        await d.hc.saveProgress(d.auth, {...item, statusId: fresh.statusId, read}, pages);
       } catch (e) {
-        d.grants.revoke(); // maybe the grant is gone: the next touch asks hasPermission again
+        if (![NOT_READING, NO_READ].includes((e as Error).message)) d.grants.revoke(); // maybe the grant is gone: the next touch asks hasPermission again
         throw e;
       }
     },
