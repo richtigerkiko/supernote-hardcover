@@ -5,9 +5,9 @@ import {PixelRatio, Pressable, StyleSheet, Text, useWindowDimensions, View} from
 
 export const BLACK = '#000000';
 export const WHITE = '#ffffff';
-// The only grey: 13% (#dddddd), the lightest shade that shows on the Nomad's panel (owner's pick from a probe of 14 shades,
-// 2026-11-12). The boards' #ebebeb (8%) and everything lighter was invisible there.
-export const GREY = '#dddddd';
+// The only grey: 15% (#d9d9d9), the owner's pick. On the Nomad's panel 13% (#dddddd) is the lightest shade that shows at all
+// (probe of 14 shades, 2026-11-12); the boards' #ebebeb (8%) was invisible.
+export const GREY = '#d9d9d9';
 // Android's "serif" family is Noto Serif on the Nomad (/system/etc/fonts.xml, checked 2026-11-12), so no font is bundled.
 export const SERIF = 'serif';
 
