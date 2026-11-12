@@ -15,7 +15,7 @@ import {PRIVACY, privacyName} from './JournalPage';
 type Props = {
   book: BookDetail;
   tracking: boolean;
-  syncNote?: string; // why tracking or a change is not working, shown under the progress line ("Last sync: page N" is not shown)
+  syncNote?: string; // why tracking or a change is not working, shown under the progress line
   onToggleTracking: () => void;
   onClose: () => void;
   onWriteReview: () => void;
@@ -154,7 +154,7 @@ function ReviewEntry({r, onMore}: {r: PublicReview; onMore: () => void}) {
 type Reviews = {items: PublicReview[]; hasMore: boolean; loaded: boolean; state: 'idle' | 'loading' | 'error'};
 const NO_REVIEWS: Reviews = {items: [], hasMore: false, loaded: false, state: 'idle'};
 
-// One note or quote with Edit (opens the full-screen editor) and Remove (the "cannot be undone" confirmation is inline, so the list stays where it is).
+// One note or quote, each part clamped to 3 lines (Edit shows all of it), with Edit (opens the full-screen editor) and Remove (the "cannot be undone" confirmation is inline, so the list stays where it is).
 function JournalRow({item, onEdit, onRemove}: {item: JournalItem; onEdit: () => void; onRemove: () => Promise<void>}) {
   const {passage, thoughts} = splitEntry(item.event, item.entry);
   const [confirm, setConfirm] = useState(false);
@@ -178,8 +178,8 @@ function JournalRow({item, onEdit, onRemove}: {item: JournalItem; onEdit: () => 
         <Text style={styles.small}>{item.date}</Text>
         <Text style={[styles.small, styles.right]}>{privacyName(item.privacy)}</Text>
       </View>
-      {passage ? <Text style={[shared.quote, {marginTop: 12}]}>{passage}</Text> : null}
-      {thoughts ? <Text style={[shared.text, {marginTop: 10}]}>{thoughts}</Text> : null}
+      {passage ? <Text style={[shared.quote, {marginTop: 12}]} numberOfLines={3}>{passage}</Text> : null}
+      {thoughts ? <Text style={[shared.text, {marginTop: 10}]} numberOfLines={3}>{thoughts}</Text> : null}
       {confirm ? (
         <View style={styles.confirm}>
           <Text style={[shared.text, shared.bold]}>Remove this entry from Hardcover? This cannot be undone.</Text>
@@ -330,7 +330,6 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
   }
 
   const page = book.status === 'Finished' ? ed.pages : Math.min(ed.pages, Math.max(1, Math.round(book.progress * ed.pages)));
-  const problem = syncNote && !syncNote.startsWith('Last sync') ? syncNote : ''; // the normal sync line is not shown, an error is
   const edMeta = join([ed.isbn, ed.lang, ed.year]);
   return (
     <View style={shared.page}>
@@ -384,7 +383,7 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
             </Pressable>
             <View style={styles.progress}>
               <Progress page={page} total={ed.pages} />
-              {problem ? <Text style={styles.problem}>{problem}</Text> : null}
+              {syncNote ? <Text style={styles.problem}>{syncNote}</Text> : null}
             </View>
           </View>
         </View>

@@ -16,7 +16,7 @@ export const shared = StyleSheet.create({
   topBar: {flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 20, paddingRight: 64, height: 68}, // right gap: the host's floating home button sits there
   close: {width: 56, height: 56, alignItems: 'center', justifyContent: 'center'},
   barTitle: {flex: 1, fontSize: 22, fontWeight: '500', color: BLACK},
-  body: {paddingTop: 4, paddingHorizontal: 32, paddingBottom: 12},
+  body: {paddingTop: 12, paddingHorizontal: 32, paddingBottom: 12}, // 12: the host's home button reaches about 80 dp down on the right (seen on the Nomad)
   actions: {flexDirection: 'row', gap: 16, paddingTop: 14, paddingHorizontal: 32, paddingBottom: 18},
   button: {flex: 1, height: 64, flexDirection: 'row', gap: 12, borderWidth: 2, borderColor: BLACK, borderRadius: 32, alignItems: 'center', justifyContent: 'center', backgroundColor: WHITE},
   buttonSmall: {flex: 0, height: 52, borderRadius: 26, paddingHorizontal: 28},
@@ -81,7 +81,7 @@ export function Button({label, onPress, solid, disabled, small, accessibilityLab
 
 export function Link({label, onPress, accessibilityLabel}: {label: string; onPress: () => unknown; accessibilityLabel?: string}) {
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? label} style={shared.link} onPress={() => void onPress()}>
+    <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? label} hitSlop={{left: 8, right: 8}} style={shared.link} onPress={() => void onPress()}>
       <Text style={shared.linkText}>{label}</Text>
     </Pressable>
   );

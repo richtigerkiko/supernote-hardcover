@@ -98,13 +98,12 @@ export function createTracking(d: {
       });
   }
 
-  // One line for the page: why tracking is not working, or the last push. lastPush and lastError are shared by all
-  // books, so they show only for the file that is open.
+  // One line for the page: why tracking is not working, else nothing (the page no longer shows the last push). lastError is
+  // shared by all books, so it shows only for the file that is open.
   const syncNote = (path: string): string => {
     if (!ok) return 'Signed out, tracking stopped';
-    const {lastError: e, lastPush: p} = tracker.state;
-    if (e?.path === path) return e.message;
-    return p?.path === path ? `Last sync: page ${p.pages}` : '';
+    const e = tracker.state.lastError;
+    return e?.path === path ? e.message : '';
   };
 
   return {

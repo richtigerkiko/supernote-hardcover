@@ -121,9 +121,9 @@ test('an edition with no page count is not listed', () => {
   expect(t).toContain('2 editions without a page count hidden.');
 });
 
-test('the normal sync line is not shown, an error is', () => {
-  expect(all(render({syncNote: 'Last sync: page 120'}))).not.toContain('Last sync');
+test('a sync problem is shown under the progress when given', () => {
   expect(all(render({syncNote: 'Token rejected, tracking stopped'}))).toContain('Token rejected, tracking stopped');
+  expect(all(render({}))).not.toContain('tracking stopped');
 });
 
 test('tapping the cover opens it full size over the page; closing (button or anywhere) removes it', () => {
