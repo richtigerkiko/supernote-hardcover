@@ -115,6 +115,7 @@ function Progress({page, total}: {page: number; total: number}) {
 type OnLike = (r: PublicReview) => Promise<void>;
 
 // Heart and count: outline when not liked, filled and bold when liked. A tap sends the opposite; off while that is in flight.
+// The Nomad draws a bare U+2665 as a red emoji; with U+FE0E it is the black text glyph (probed 2026-11-12).
 function Like({r, onLike}: {r: PublicReview; onLike: OnLike}) {
   const [busy, setBusy] = useState(false);
   return (
@@ -128,7 +129,7 @@ function Like({r, onLike}: {r: PublicReview; onLike: OnLike}) {
         setBusy(true);
         onLike(r).finally(() => setBusy(false));
       }}>
-      <Text style={[styles.likeText, r.liked && shared.bold]}>{`${r.liked ? '♥' : '♡'} ${r.likes}`}</Text>
+      <Text style={[styles.likeText, r.liked && shared.bold]}>{`${r.liked ? '♥︎' : '♡'} ${r.likes}`}</Text>
     </Pressable>
   );
 }
@@ -593,7 +594,7 @@ const styles = StyleSheet.create({
   rvName: {fontSize: 21, fontWeight: '700', color: BLACK, flexShrink: 1},
   rvStars: {fontSize: 19, letterSpacing: 1, color: BLACK},
   rvDate: {fontSize: 18, color: BLACK, marginLeft: 'auto'},
-  like: {minWidth: 56, minHeight: 48, alignSelf: 'center', alignItems: 'flex-end', justifyContent: 'center'},
+  like: {minWidth: 56, minHeight: 48, alignItems: 'flex-end', justifyContent: 'center'}, // no alignSelf: the row puts its text on the name's baseline
   likeText: {fontSize: 21, color: BLACK},
   rvBadges: {fontSize: 18, fontStyle: 'italic', color: BLACK},
   badges: {flexDirection: 'row', gap: 8, marginTop: 8},

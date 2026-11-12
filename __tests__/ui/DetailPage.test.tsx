@@ -221,7 +221,7 @@ describe('reviews tab', () => {
     await tap("Like User1's review");
     expect(onLikeReview).toHaveBeenLastCalledWith(1, true);
     press(tree, 'Back to reviews');
-    expect(all(tree)).toContain('♥ 3'); // the list has it too
+    expect(all(tree)).toContain('♥︎ 3'); // the list has it too (U+FE0E: text glyph, not the emoji)
     expect(all(tree)).toContain('♡ 2'); // the other review is untouched
     await tap("Unlike User1's review");
     expect(onLikeReview).toHaveBeenLastCalledWith(1, false);
