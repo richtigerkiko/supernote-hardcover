@@ -145,7 +145,7 @@ test('without a cover there is no cover button', () => {
 });
 
 describe('reviews tab', () => {
-  const rev = (id: number, over: any = {}) => ({id, user: `User${id}`, supporter: false, rating: 4.5, text: 'Nice.', spoiler: false, date: '2026-10-02', ...over});
+  const rev = (id: number, over: any = {}) => ({id, user: `User${id}`, supporter: false, rating: 4.5, text: 'Nice.', spoiler: false, date: '2026-10-02', likes: 2, liked: false, ...over});
   const flush = () => act(async () => {});
 
   test('nothing is requested until the Reviews tab is opened; then once, with the entries shown', async () => {
@@ -200,6 +200,35 @@ describe('reviews tab', () => {
     expect(all(tree)).toContain('SECRET full text');
     press(tree, 'Back to reviews');
     expect(all(tree)).not.toContain('SECRET full text');
+  });
+
+  test('a like tap shows the server count in the list and the open review, a second tap unlikes, a failure changes nothing', async () => {
+    const onLikeReview = jest.fn().mockResolvedValueOnce(3).mockResolvedValueOnce(2).mockRejectedValueOnce(new Error('x'));
+    const tree = (await (async () => {
+      const t = render({onLoadReviews: jest.fn().mockResolvedValue({reviews: [rev(1, {spoiler: true}), rev(2)], hasMore: false}), onLikeReview});
+      press(t, 'Reviews tab');
+      await flush();
+      return t;
+    })());
+    expect(all(tree)).toContain('♡ 2');
+    press(tree, "More of User1's review");
+    const tap = async (label: string) => {
+      const b = tree.root.findAllByProps({accessibilityLabel: label}).filter((n: any) => n.props.onPress).pop(); // the last is the open review's
+      act(() => b.props.onPress());
+      expect(tree.root.findAllByProps({accessibilityLabel: label, disabled: true}).length).toBeGreaterThan(0); // off while in flight
+      await flush();
+    };
+    await tap("Like User1's review");
+    expect(onLikeReview).toHaveBeenLastCalledWith(1, true);
+    press(tree, 'Back to reviews');
+    expect(all(tree)).toContain('♥︎ 3'); // the list has it too (U+FE0E: text glyph, not the emoji)
+    expect(all(tree)).toContain('♡ 2'); // the other review is untouched
+    await tap("Unlike User1's review");
+    expect(onLikeReview).toHaveBeenLastCalledWith(1, false);
+    expect(all(tree)).not.toContain('♥');
+    await tap("Like User1's review"); // rejected
+    expect(all(tree)).not.toContain('♥');
+    expect(tree.root.findAllByProps({accessibilityLabel: "Like User1's review", disabled: true})).toHaveLength(0);
   });
 });
 

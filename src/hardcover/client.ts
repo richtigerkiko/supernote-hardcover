@@ -1,6 +1,7 @@
 import {
   HardcoverClient,
   JournalEvent,
+  LikeableType,
   PrivacySetting,
   operations,
   type Book,
@@ -212,9 +213,10 @@ export const REVIEWS_PAGE = 10;
 // Public reviews only (privacy_setting_id 1), newest first. One extra row is asked for to know whether there is more.
 // shortcut: the field names (user.name, user.flair as the Supporter badge) come from the SDK's generated schema and are
 // not yet run against the live API; verify with a read-only query before release.
-const REVIEWS_QUERY = `query Reviews($bookId: Int!, $limit: Int!, $offset: Int!) {
+const REVIEWS_QUERY = `query Reviews($bookId: Int!, $limit: Int!, $offset: Int!, $me: Int!) {
   user_books(where: {book_id: {_eq: $bookId}, has_review: {_eq: true}, privacy_setting_id: {_eq: 1}}, order_by: {reviewed_at: desc_nulls_last}, limit: $limit, offset: $offset) {
-    id rating review_raw review_has_spoilers reviewed_at
+    id rating review_raw review_has_spoilers reviewed_at likes_count
+    likes(where: {user_id: {_eq: $me}}, limit: 1) { id }
     user { name flair }
   }
 }`;
@@ -225,11 +227,13 @@ type ReviewRow = {
   review_raw: string | null;
   review_has_spoilers: boolean | null;
   reviewed_at: string | null;
+  likes_count: number | null;
+  likes: {id: number}[] | null;
   user: {name: string | null; flair: string | null} | null;
 };
 
 export async function fetchReviews(auth: Auth, bookId: number, offset = 0): Promise<{reviews: PublicReview[]; hasMore: boolean}> {
-  const data = await sdk(auth).graphql<{user_books: ReviewRow[]}>(REVIEWS_QUERY, {bookId, limit: REVIEWS_PAGE + 1, offset});
+  const data = await sdk(auth).graphql<{user_books: ReviewRow[]}>(REVIEWS_QUERY, {bookId, limit: REVIEWS_PAGE + 1, offset, me: await userId(auth)});
   const rows = data.user_books ?? [];
   const reviews = rows.slice(0, REVIEWS_PAGE).map(r => ({
     id: r.id,
@@ -239,8 +243,20 @@ export async function fetchReviews(auth: Auth, bookId: number, offset = 0): Prom
     text: (r.review_raw ?? '').trim(),
     spoiler: !!r.review_has_spoilers,
     date: (r.reviewed_at ?? '').slice(0, 10),
+    likes: r.likes_count ?? 0,
+    liked: !!r.likes?.length,
   }));
   return {reviews, hasMore: rows.length > REVIEWS_PAGE};
+}
+
+// Likes a review (on: true) or takes the like back; a review is liked as its library entry. Needs write:social. Returns
+// the new like count. Not likes.like / unlike: they turn an empty answer into a count of 0, which would show as a success.
+export async function setLike(auth: Auth, userBookId: number, on: boolean): Promise<number> {
+  const vars = {likeableId: userBookId, likeableType: LikeableType.Review};
+  const c = sdk(auth);
+  const r = on ? (await c.request(operations.Like, vars)).upsert_like : (await c.request(operations.Unlike, vars)).delete_like;
+  if (typeof r?.likesCount !== 'number') throw new Error('Hardcover did not change the like');
+  return r.likesCount;
 }
 
 // ---- the book's own notes and quotes (read, edit, remove) ----

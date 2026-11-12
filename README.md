@@ -16,6 +16,7 @@ A Supernote plugin that keeps your [Hardcover](https://hardcover.app) reading pr
 
 - Reading progress tracking
 - Book detail page with cover, info and reviews
+- Like other readers' reviews
 - Quotes and notes from the text selection menu
 
 ## Requirements

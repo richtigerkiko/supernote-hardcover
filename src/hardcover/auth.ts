@@ -5,7 +5,8 @@ import type {JsonFile} from '../core/store';
 
 // What the plugin's calls need (scopes per SDK resource): library and reads, marking an edition owned, catalogue lookups, journal.
 // write:reviews is for the review card, read:journal for the read-back after a journal add; tokens stored before they were asked for lack them (see hasScope).
-export const SCOPES = ['read:me:content', 'read:library', 'write:library', 'read:catalog', 'write:reviews', 'read:social', 'read:journal'] as const;
+// write:social is for liking a review.
+export const SCOPES = ['read:me:content', 'read:library', 'write:library', 'read:catalog', 'write:reviews', 'read:social', 'write:social', 'read:journal'] as const;
 
 export const hasScope = (granted: string | undefined, scope: string): boolean => (granted ?? '').split(/\s+/).includes(scope);
 

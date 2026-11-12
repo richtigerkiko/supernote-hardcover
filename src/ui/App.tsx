@@ -148,6 +148,7 @@ function AppInner(): React.JSX.Element {
         onClose={() => setJournal({passage: 'Call me Ishmael. Some years ago, never mind how long precisely, having little or no money in my purse, I thought I would sail about a little and see the watery part of the world.'})}
         onWriteReview={() => setReview(BLANK_REVIEW)}
         onLoadReviews={() => Promise.resolve({reviews: MOCK_REVIEWS, hasMore: false})}
+        onLikeReview={(id, on) => Promise.resolve((MOCK_REVIEWS.find(r => r.id === id)?.likes ?? 0) + (on ? 1 : 0))}
         onLoadJournal={() => Promise.resolve({entries: MOCK_JOURNAL, hasMore: false})}
         onEditJournal={(item, text) => Promise.resolve(item.event === 'note' ? text : joinEntry(splitEntry('quote', item.entry).passage, text))}
         onRemoveJournal={() => flaky()}
@@ -239,6 +240,7 @@ function AppInner(): React.JSX.Element {
         )
       }
       onLoadReviews={offset => session.api!.loadReviews(offset)}
+      onLikeReview={(id, on) => session.api!.likeReview(id, on)}
       onLoadJournal={offset => session.api!.loadJournal(offset)}
       onEditJournal={(item, text, privacy) => session.api!.editJournal(item, text, privacy)}
       onRemoveJournal={id => session.api!.removeJournal(id)}

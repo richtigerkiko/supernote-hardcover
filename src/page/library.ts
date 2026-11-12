@@ -26,6 +26,7 @@ export type Client = Pick<
   | 'saveProgress'
   | 'saveReview'
   | 'searchBooks'
+  | 'setLike'
   | 'setStatus'
   | 'updateJournal'
 >;

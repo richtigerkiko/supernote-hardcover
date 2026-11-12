@@ -25,6 +25,7 @@ function setup({list = [item()], scope = SCOPES.join(' '), dialogYes = true, sam
     fetchReview: jest.fn(async () => ({markdown: 'm', hasSpoilers: true, sponsored: true, notes: 'n', rating: 4})),
     saveReview: jest.fn(async () => {}),
     fetchReviews: jest.fn(async () => ({reviews: [], hasMore: false})),
+    setLike: jest.fn(async () => 3),
     setStatus: jest.fn(async () => {}),
     saveJournal: jest.fn(async () => {}),
     fetchJournal: jest.fn(async () => ({entries: [], hasMore: false})),
@@ -378,6 +379,22 @@ describe('review calls', () => {
     t.dialog.mockResolvedValue(false);
     await expect(t.api.writeReview()).rejects.toThrow('new sign-in');
     expect(t.auth.signOut).not.toHaveBeenCalled();
+  });
+
+  test('likeReview sends the like; a sign-in without write:social gets the new sign-in prompt instead', async () => {
+    const t = setup();
+    await t.api.load();
+    expect(await t.api.likeReview(42, true)).toBe(3);
+    expect(t.hc.setLike).toHaveBeenCalledWith(t.auth, 42, true);
+
+    const old = setup({scope: SCOPES.filter(x => x !== 'write:social').join(' '), dialogYes: false});
+    await old.api.load(); // "Later" to the load() prompt
+    old.dialog.mockResolvedValue(true);
+    await expect(old.api.likeReview(42, true)).rejects.toThrow('new sign-in');
+    expect(old.dialog).toHaveBeenLastCalledWith(expect.stringContaining('Liking reviews needs a new sign-in'), 'Cancel', 'Sign in', false);
+    expect(old.auth.signOut).toHaveBeenCalled();
+    expect(old.sess.opened).toHaveBeenCalled(); // reload shows Sign in
+    expect(old.hc.setLike).not.toHaveBeenCalled();
   });
 
   test('saveReview and loadReviews use the loaded book', async () => {

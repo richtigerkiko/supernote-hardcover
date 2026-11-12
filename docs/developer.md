@@ -19,7 +19,7 @@ The package holds no token and no secret, only a public OAuth client id. Users s
 1. Open [New Developer App](https://hardcover.app/account/developer-apps/new) on hardcover.app.
 2. Application type: **Mobile, desktop, or CLI**. Give it a name; users see it on the consent screen.
 3. Leave **Device Authorization Grant** on. No redirect URI is needed.
-4. Allow these scopes (the list is `SCOPES` in [`src/hardcover/auth.ts`](../src/hardcover/auth.ts)): `read:me:content`, `read:library`, `write:library`, `read:catalog`, `write:reviews`, `read:social`, `read:journal`.
+4. Allow these scopes (the list is `SCOPES` in [`src/hardcover/auth.ts`](../src/hardcover/auth.ts)): `read:me:content`, `read:library`, `write:library`, `read:catalog`, `write:reviews`, `read:social`, `write:social`, `read:journal`.
 5. Give the client id to the build, either as the environment variable `HARDCOVER_OAUTH_CLIENT_ID` or in a `.env` file in the repo root (gitignored):
 
    ```
