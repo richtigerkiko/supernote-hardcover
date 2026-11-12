@@ -1,5 +1,5 @@
-import type {ReadingItem, ReadRecord} from '../../src/core/types';
-import {createTracker, type TrackerDeps} from '../../src/core/tracker';
+import type {ReadingItem} from '../../src/core/types';
+import {createTracker} from '../../src/core/tracker';
 
 const BUTCHER: ReadingItem = {
   userBookId: 7,
@@ -11,7 +11,6 @@ const BUTCHER: ReadingItem = {
   editionPages: 330,
   read: null,
 };
-const readOf = (id: number): ReadRecord => ({id, started_at: null, finished_at: null, progress_pages: null, edition_id: null});
 const PATH = '/Document/ebooks/butcher.epub';
 const TOTAL = 332;
 // 332 reader pages on a 330-page edition: index 81 is edition page 82, index 86 page 87; pushes are throttled to one per 10 s
@@ -88,15 +87,12 @@ test('a book that is not on the reading list is never pushed', async () => {
   expect(pushes).toEqual([]);
 });
 
-test('an unidentified book is looked up again after the negative TTL, not before', async () => {
+test('a book is resolved once, however long you read: no timed re-check', async () => {
   const {tracker, resolves, advance} = setup({item: null});
   await tracker.tick(at(5));
-  advance(60_000);
+  advance(3_600_000);
   await tracker.tick(at(5));
   expect(resolves.length).toBe(1);
-  advance(600_000);
-  await tracker.tick(at(5));
-  expect(resolves.length).toBe(2);
 });
 
 test('a failed push keeps the page and is retried after a pause, also from a touch with no usable sample', async () => {
@@ -208,73 +204,6 @@ test('a hung tick does not block later ones forever', async () => {
   expect(pushes).toEqual([edition(86)]);
 });
 
-describe('re-check of matched books', () => {
-  const run = (resolveFn: TrackerDeps['resolve'], pushFn: TrackerDeps['push']) => {
-    let t = 1_000_000;
-    const tracker = createTracker({now: () => t, resolve: resolveFn, push: pushFn});
-    return {tracker, advance: (ms: number) => (t += ms)};
-  };
-
-  test('a refreshed edition with another page count rebases instead of pushing the same place', async () => {
-    let item: ReadingItem = BUTCHER;
-    const pushes: number[] = [];
-    const {tracker, advance} = run(async () => item, async (_it, pages) => void pushes.push(pages));
-    await tracker.tick(at(81));
-    item = {...BUTCHER, editionPages: 660};
-    advance(601_000);
-    await tracker.tick(at(81)); // re-checked: same place, other units
-    expect(pushes).toEqual([]);
-    advance(11_000);
-    await tracker.tick(at(86));
-    expect(pushes).toEqual([Math.round((87 / TOTAL) * 660)]);
-  });
-
-  test('after the interval a matched book picks up a new read id', async () => {
-    let item: ReadingItem = {...BUTCHER, read: readOf(1)};
-    const used: number[] = [];
-    const {tracker, advance} = run(async () => item, async it => void used.push(it.read!.id));
-    await tracker.tick(at(81));
-    item = {...BUTCHER, read: readOf(2)};
-    advance(601_000);
-    await tracker.tick(at(81)); // re-checked, same page
-    await tracker.tick(at(86));
-    expect(used).toEqual([2]);
-  });
-
-  test('a book that left the list while a push was failing stops pushing without an error', async () => {
-    let item: ReadingItem | null = BUTCHER;
-    let fail = true;
-    const pushes: number[] = [];
-    const {tracker, advance} = run(async () => item, async (it, pages) => {
-      if (fail) throw new Error('Hardcover HTTP 500');
-      pushes.push(pages);
-    });
-    await tracker.tick(at(81));
-    await tracker.tick(at(86)); // push fails, stays pending
-    item = null;
-    fail = false;
-    advance(601_000);
-    await tracker.tick(at(86));
-    expect(pushes).toEqual([]);
-    expect(tracker.state.lastError?.message).toMatch(/500/); // the old one, no new "push(null)" error
-    advance(61_000);
-    await tracker.tick(null);
-    expect(pushes).toEqual([]);
-  });
-
-  test('a failed re-check keeps pushing with the old item and is not retried on every touch', async () => {
-    let calls = 0;
-    const pushes: number[] = [];
-    const {tracker, advance} = run(async () => { if (++calls > 1) throw new Error('offline'); return BUTCHER; }, async (_it, pages) => void pushes.push(pages));
-    await tracker.tick(at(81));
-    advance(601_000);
-    await tracker.tick(at(81)); // re-check throws
-    await tracker.tick(at(86));
-    expect(calls).toBe(2);
-    expect(pushes).toEqual([edition(86)]);
-  });
-});
-
 test('errors and the last push name the file they belong to', async () => {
   const {tracker} = setup({pushFails: 'Hardcover HTTP 500'});
   await tracker.tick(at(81));
@@ -282,35 +211,23 @@ test('errors and the last push name the file they belong to', async () => {
   expect(tracker.state.lastError?.path).toBe(PATH);
 });
 
-test('a lookup error names the file, and a push that settles after the book left the list does not throw', async () => {
-  let t = 1_000_000;
-  let item: ReadingItem | null | 'offline' = BUTCHER;
-  let release: (() => void) | undefined;
-  let slow = false;
-  const tracker = createTracker({
-    now: () => t,
-    resolve: async () => { if (item === 'offline') throw new Error('offline'); return item; },
-    push: async () => { if (slow) await new Promise<void>(r => (release = r)); },
-  });
-  await tracker.tick(at(81));
-  t += 601_000;
-  item = 'offline';
+test('a lookup error names the file', async () => {
+  const tracker = createTracker({resolve: async () => { throw new Error('offline'); }, push: async () => {}});
   await tracker.tick(at(81));
   expect(tracker.state.lastError).toMatchObject({message: 'offline', path: PATH});
-  item = BUTCHER;
-  await tracker.tick(at(86)); // pushes, fast
-  expect(tracker.state.lastPush?.path).toBe(PATH);
-  slow = true;
-  t += 11_000; // past the push throttle
-  const hung = tracker.tick(at(111)); // crossing: a push that hangs
-  while (!release) await Promise.resolve(); // until the push is hanging
-  t += 61_000; // the hung tick expires, a new one re-checks and the book is gone
-  item = null;
-  t += 601_000;
-  await tracker.tick(at(111));
-  release?.();
-  await hung;
-  expect(tracker.state.lastError).toBeNull(); // the late push counts as done; no TypeError from b.item being null by now
+});
+
+test('hasPending is true while a page waits for its push, false once it went out', async () => {
+  const {tracker, advance} = setup();
+  await tracker.tick(at(81));
+  expect(tracker.hasPending()).toBe(false);
+  await tracker.tick(at(86)); // pushed at once
+  advance(1000);
+  await tracker.tick(at(90)); // inside the window: waits
+  expect(tracker.hasPending()).toBe(true);
+  advance(WINDOW);
+  await tracker.tick(null);
+  expect(tracker.hasPending()).toBe(false);
 });
 
 test("reset forgets every book and the last error: the next touch is a first sight again", async () => {

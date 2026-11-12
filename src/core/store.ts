@@ -19,6 +19,7 @@ export interface FileMeta extends EpubMeta {
   failed?: boolean; // memory only: the EPUB could not be read
   edition?: {id: number; pages: number}; // the edition the reader picked for this file
   tracking?: boolean; // tracking is switched on for this file
+  book?: {bookId: number; userBookId: number; title: string}; // the library entry, saved when tracking is switched on
   linked?: {bookId: number; editionId?: number}; // the reader said No to adding it: the catalogue book this file is
 }
 
@@ -108,19 +109,10 @@ export function createMetaCache(file: JsonFile<MetaStore>, stat: NativeFs['stat'
       }
       await file.save();
     },
-  };
-}
-
-// Small user settings that must survive a reinstall (kept in MyStyle, which needs the FILE:WRITE grant before the
-// first access: ask for it before calling load()).
-export function createSettings<T extends Record<string, unknown>>(file: JsonFile<Partial<T>>, defaults: T) {
-  return {
-    async get<K extends keyof T>(key: K): Promise<T[K]> {
-      return ((await file.load())[key] ?? defaults[key]) as T[K];
-    },
-    async set<K extends keyof T>(key: K, value: T[K]): Promise<void> {
-      (await file.load())[key] = value;
-      await file.save();
+    /** Paths whose entry has tracking on (the size is not checked: get() does that). */
+    async tracked(): Promise<string[]> {
+      const data = await file.load();
+      return Object.keys(data).filter(p => data[p].meta?.tracking);
     },
   };
 }

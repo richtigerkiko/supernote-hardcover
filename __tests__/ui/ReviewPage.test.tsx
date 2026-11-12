@@ -21,7 +21,6 @@ const render = (props: any = {}) => {
   return tree;
 };
 const all = (tree: any) => texts(tree.toJSON()).join('|');
-const press = (tree: any, label: string) => act(() => tree.root.findByProps({accessibilityLabel: label}).props.onPress());
 const field = (tree: any, label: string) => tree.root.findByProps({accessibilityLabel: label});
 const type = (tree: any, v: string, label = 'Review') => act(() => field(tree, label).props.onChangeText(v));
 const save = async (tree: any) => {

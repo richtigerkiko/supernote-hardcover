@@ -68,3 +68,10 @@ test('overlapping titles by one author: the longer title wins when the file has 
   expect(matchBook('Dune Messiah Frank Herbert', list)!.title).toBe('Dune Messiah');
   expect(matchBook('Dune Frank Herbert', list)!.title).toBe('Dune');
 });
+
+test('non-Latin titles match on their own words', () => {
+  const reading = [{title: 'Война и мир', authors: ['Лев Толстой']}, {title: '三体', authors: ['刘慈欣']}];
+  expect(matchBook('Война и мир Лев Толстой', reading)?.title).toBe('Война и мир');
+  expect(matchBook('三体 刘慈欣', reading)?.title).toBe('三体');
+  expect(matchBook('Преступление и наказание Фёдор Достоевский', reading)).toBeNull();
+});

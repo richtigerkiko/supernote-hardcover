@@ -26,19 +26,31 @@ export function createTracking(d: {
   let sampling = 0; // wall-clock start of the running touch handler, 0 when idle
 
   const tracker = createTracker({
+    // The ids saved when tracking was switched on: no network, no library list.
     resolve: async path => {
+      const m = await d.meta.get(path);
+      if (m.book && m.edition) {
+        return {...m.book, statusId: 0, authors: [], editionId: m.edition.id, editionPages: m.edition.pages, read: null};
+      }
+      // Tracking was switched on before the ids were saved: look the book up once and save them.
       await d.grants.needGranted();
-      return d.library.resolvePath(path);
+      const item = await d.library.resolvePath(path);
+      if (item) await d.meta.save(path, {...m, book: {bookId: item.bookId, userBookId: item.userBookId, title: item.title}, edition: m.edition ?? (item.editionId && item.editionPages ? {id: item.editionId, pages: item.editionPages} : undefined)});
+      return item;
     },
+    // One user_books row per push, for the current read (a finished one is not touched, see saveProgress).
     push: async (item, pages) => {
       await d.grants.needGranted();
       log('push', item.title, pages);
-      const hadRead = !!item.read;
-      await d.hc.saveProgress(d.auth, item, pages).catch(e => {
+      try {
+        const fresh = await d.hc.fetchUserBook(d.auth, item.userBookId);
+        if (!fresh) throw new Error('the book is no longer in your library');
+        const read = fresh.read && {...fresh.read, edition_id: item.editionId}; // the file's edition, not the entry's
+        await d.hc.saveProgress(d.auth, {...item, read}, pages);
+      } catch (e) {
         d.grants.revoke(); // maybe the grant is gone: the next touch asks hasPermission again
         throw e;
-      });
-      if (!hadRead) d.library.drop(); // the cached list still says read: null; fetch it again so a forget cannot insert twice
+      }
     },
   });
 
@@ -60,16 +72,18 @@ export function createTracking(d: {
     const t = Date.now();
     if (sampling && t - sampling < HUNG_MS) return; // one at a time; a call hung longer than HUNG_MS is abandoned
     sampling = t;
-    d.grants
-      .granted()
-      .then(g => (g ? d.sample().catch(() => null) : null))
-      .then(async s => {
+    d.meta
+      .anyTracked()
+      .then(async any => {
+        // No book has tracking on and nothing waits for a retry: no SDK call at all.
+        if (!any && !tracker.hasPending()) return;
+        const s = (await d.grants.granted()) ? await d.sample().catch(() => null) : null;
         log('touch', s ? `${s.page}/${s.total}` : 'no sample'); // one line per finger-down, visible in logcat only
         // A book that tracking is not switched on for is ignored (null still lets a failed push of another book retry).
         const on = s && (await d.meta.get(s.path)).tracking === true;
-        return tracker.tick(on ? s : null);
+        await tracker.tick(on ? s : null);
+        stopIfTokenRejected();
       })
-      .then(stopIfTokenRejected)
       .catch(e => {
         d.grants.revoke();
         log('touch error', String(e));
