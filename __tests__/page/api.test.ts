@@ -193,12 +193,27 @@ describe('one edition per file', () => {
       const t = setup({list: [item(over)]});
       t.tracking.syncNote = () => '';
       await t.api.load();
-      await t.api.setTracking(true);
-      return ((await t.api.load()) as any).sync;
+      const toggled = await t.api.setTracking(true);
+      expect(((await t.api.load()) as any).sync).toBe(toggled); // the toggle and a reload agree
+      return toggled;
     };
     expect(await sync({statusId: 1, read})).toBe(NOT_READING);
     expect(await sync({statusId: 2, read: null})).toBe(NOT_READING);
     expect(await sync({statusId: 2, read})).toBe('');
+  });
+
+  test('the status picker sets and clears the hint, and a tracking problem always wins', async () => {
+    const t = setup({list: [item({statusId: 1})]});
+    t.tracking.syncNote = () => '';
+    await t.api.load();
+    expect(await t.api.setStatus('Currently reading')).toBe(''); // tracking off: nothing to say
+    await t.api.setTracking(true);
+    expect(await t.api.setStatus('Want to read')).toBe(NOT_READING);
+    expect(await t.api.setStatus('Currently reading')).toBe(''); // the server starts the read
+    expect(await t.api.setTracking(true)).toBe('');
+    t.tracking.syncNote = () => 'Signed out, tracking stopped';
+    expect(await t.api.setTracking(true)).toBe('Signed out, tracking stopped');
+    expect(await t.api.setStatus('Want to read')).toBe('Signed out, tracking stopped');
   });
 
   test('switching tracking on saves the ids the tracker uses, and a failing save rejects', async () => {

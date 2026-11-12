@@ -15,7 +15,7 @@ import JournalPage from './JournalPage';
 import Message from './Message';
 import ReviewPage from './ReviewPage';
 import {MOCK_BOOK, MOCK_JOURNAL, MOCK_LONG, MOCK_REVIEWS} from './preview/mockBook';
-import {BLANK_REVIEW, NOT_READING, type BookDetail, type Review} from '../core/types';
+import {BLANK_REVIEW, type BookDetail, type Review} from '../core/types';
 import {session, type Ask} from '../page/session';
 import {joinEntry, splitEntry} from '../core/journal';
 import {log} from '../core/util';
@@ -98,14 +98,12 @@ function AppInner(): React.JSX.Element {
 
   if (preview === null) return <View />;
   const msg = (e: any) => String(e?.message ?? e);
-  // The page is not reloaded after a toggle or a status change, so the sync line follows them here: tracking on for a
-  // book that is not Currently reading writes nothing (same rule as load()).
-  const idle = (on: boolean, status?: string) => (on && status && status !== 'Currently reading' ? NOT_READING : '');
+  // The page is not reloaded after a toggle or a status change: both return the new sync line.
   const toggle = () => {
     const on = !tracking;
     setTracking(on);
     session.api?.setTracking(on).then(
-      () => setSyncNote(idle(on, book?.status)),
+      s => setSyncNote(s),
       (e: any) => {
         setTracking(!on);
         setSyncNote(`Could not turn tracking ${on ? 'on' : 'off'}: ${msg(e)}`);
@@ -245,7 +243,7 @@ function AppInner(): React.JSX.Element {
         const before = book.status;
         setBook({...book, status});
         session.api?.setStatus(status).then(
-          () => setSyncNote(idle(tracking, status)),
+          s => setSyncNote(s),
           (e: any) => {
             setBook(b => (b ? {...b, status: before} : b));
             setSyncNote(`Could not change the status: ${msg(e)}`);

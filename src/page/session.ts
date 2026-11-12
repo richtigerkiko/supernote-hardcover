@@ -15,11 +15,11 @@ export type LoadResult = {message: string; signIn?: boolean} | {book: PageBook; 
 export interface SessionApi {
   load(): Promise<LoadResult>;
   signIn(onCode: (uri: string, code: string, qr: string) => void): Promise<boolean>;
-  setTracking(on: boolean): Promise<void>;
+  setTracking(on: boolean): Promise<string>; // the new sync line
   setEdition(editionId: string): Promise<void>;
   passage(): Promise<string>;
   saveJournal(entry: Entry): Promise<void>;
-  setStatus(label: string): Promise<void>;
+  setStatus(label: string): Promise<string>; // the new sync line
   /** Adds the loaded page's linked book with the file's edition, or (after an Ask) the given book with the picked edition. Reload after. */
   addToLibrary(pick?: {bookId: number; editionId: string}): Promise<void>;
   /** Catalogue hits for the book search. */
