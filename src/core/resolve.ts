@@ -20,7 +20,8 @@ export async function resolveBook({
   const isbns = isbnsIn([...meta.ids, meta.pageBreakSource ?? ''].join(' '));
   if (isbns.length) {
     const ids = await bookIdsForIsbns(isbns);
-    if (ids.length) return reading.find(r => ids.includes(r.bookId)) ?? null;
+    const hit = reading.find(r => ids.includes(r.bookId));
+    if (hit) return hit; // known to Hardcover but not on the shelf: the title may still match a shelf book
   }
   return meta.title ? matchBook(`${meta.title} ${meta.creator ?? ''}`, reading) : null;
 }

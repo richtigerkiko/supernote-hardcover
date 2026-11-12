@@ -2,8 +2,9 @@ import {inflateSync, strFromU8} from 'fflate';
 
 const u16 = (b: Uint8Array, o: number): number => b[o] | (b[o + 1] << 8);
 const u32 = (b: Uint8Array, o: number): number => (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0;
+const ENTITIES: Record<string, string> = {lt: '<', gt: '>', quot: '"', apos: "'", amp: '&'};
 const tag = (xml: string, name: string): string[] =>
-  [...xml.matchAll(new RegExp(`<dc:${name}[^>]*>([^<]*)</dc:${name}>`, 'g'))].map(m => m[1]);
+  [...xml.matchAll(new RegExp(`<dc:${name}[^>]*>([^<]*)</dc:${name}>`, 'g'))].map(m => m[1].replace(/&(lt|gt|quot|apos|amp);/g, (_, e) => ENTITIES[e]));
 
 // Reads title/author/ids from an EPUB with a few small range reads, never the whole file:
 // the zip's end record, its central directory, and the two entries needed (container.xml, .opf).

@@ -1,5 +1,5 @@
 import type {ReadingItem} from '../../src/core/types';
-import {bookIdsForIsbns, fetchBookDetail, fetchUserBooks, localDate, progressInput, saveProgress, saveJournal, saveReview, fetchReview, setStatus} from '../../src/hardcover/client';
+import {fetchUserBookForBook, bookIdsForIsbns, fetchBookDetail, fetchUserBooks, localDate, progressInput, saveProgress, saveJournal, saveReview, fetchReview, setStatus} from '../../src/hardcover/client';
 
 // The SDK is the transport; these tests check what we send it and how we map what it returns.
 type Mocks = Record<string, jest.Mock>;
@@ -302,4 +302,27 @@ describe('journal read, edit, remove', () => {
     mockSdk.graphql = jest.fn().mockResolvedValue({delete_reading_journal: {errors: ['nope']}});
     await expect(deleteJournal('t', 7)).rejects.toThrow(/refused/);
   });
+});
+
+test('saveProgress leaves a finished read alone and inserts a new one', async () => {
+  mockSdk.request.mockResolvedValue({insert_user_book_read: {userBookRead: {id: 56}}});
+  const finished = {...ITEM, read: {...ITEM.read!, finished_at: '2026-10-01'}};
+  await saveProgress('T', finished, 40);
+  const [op, vars] = mockSdk.request.mock.calls[0];
+  expect(op).toBe('ADD');
+  expect(vars.read).not.toHaveProperty('finished_at');
+  expect(vars.read).toMatchObject({progress_pages: 40, started_at: localDate(new Date())});
+});
+
+test('fetchUserBookForBook finds the entry for one book and reads that row only', async () => {
+  mockSdk.library.forBook = jest.fn(async () => ({id: 7}));
+  mockSdk.library.get = jest.fn(async () => ({
+    id: 7, bookId: 5, statusId: 2, editionId: 9, edition: {id: 9, pages: 300}, book: {title: 'T', cachedContributors: []},
+    userBookReads: [{id: 3, startedAt: 's', finishedAt: null, progressPages: 1, editionId: 9}, {id: 2}],
+  }));
+  const it = await fetchUserBookForBook('T', 5);
+  expect(it).toMatchObject({userBookId: 7, editionPages: 300, read: {id: 3}});
+  expect(mockSdk.library.forBook).toHaveBeenCalledWith(5);
+  mockSdk.library.forBook = jest.fn(async () => null);
+  expect(await fetchUserBookForBook('T', 5)).toBeNull();
 });

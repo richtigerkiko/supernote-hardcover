@@ -5,6 +5,8 @@ import {
   operations,
   type Book,
   type Edition,
+  type LibraryEntryWithBook,
+  type LibraryListItem,
   type TokenSource,
   type UserBookStatus,
 } from '@hardcover/sdk';
@@ -27,29 +29,41 @@ function sdk(auth: Auth): HardcoverClient {
 
 const LIBRARY_PAGE = 100;
 
-// Every book on the reader's shelves (any status).
+function toItem(u: LibraryListItem | LibraryEntryWithBook): ReadingItem {
+  const r = u.userBookReads[0]; // newest first
+  return {
+    userBookId: u.id,
+    bookId: u.bookId,
+    statusId: u.statusId,
+    title: u.book?.title ?? '',
+    authors: (u.book?.cachedContributors ?? []).flatMap(x => (x.author?.name ? [x.author.name] : [])),
+    editionId: u.editionId ?? u.edition?.id ?? null,
+    editionPages: u.edition?.pages ?? null,
+    read: r ? {id: r.id, started_at: r.startedAt, finished_at: r.finishedAt, progress_pages: r.progressPages, edition_id: r.editionId} : null,
+  };
+}
+
+// Every book on the reader's shelves (any status). The whole library: only for a button press, never while reading.
 export async function fetchUserBooks(auth: Auth): Promise<ReadingItem[]> {
   const c = sdk(auth);
   const items: ReadingItem[] = [];
   for (let offset = 0; ; offset += LIBRARY_PAGE) {
     const page = await c.library.list({limit: LIBRARY_PAGE, offset});
-    for (const u of page.items) {
-      const r = u.userBookReads[0];
-      items.push({
-        userBookId: u.id,
-        bookId: u.bookId,
-        statusId: u.statusId,
-        title: u.book.title ?? '',
-        authors: (u.book.cachedContributors ?? []).flatMap(x => (x.author?.name ? [x.author.name] : [])),
-        editionId: u.editionId ?? u.edition?.id ?? null,
-        editionPages: u.edition?.pages ?? null,
-        read: r
-          ? {id: r.id, started_at: r.startedAt, finished_at: r.finishedAt, progress_pages: r.progressPages, edition_id: r.editionId}
-          : null,
-      });
-    }
+    items.push(...page.items.map(toItem));
     if (!page.hasMore) return items;
   }
+}
+
+// One library entry by its id (null: gone), with its newest read. Used at each progress push.
+export async function fetchUserBook(auth: Auth, userBookId: number): Promise<ReadingItem | null> {
+  const u = await sdk(auth).library.get(userBookId);
+  return u && toItem(u);
+}
+
+// The entry for a book, if the reader has one.
+export async function fetchUserBookForBook(auth: Auth, bookId: number): Promise<ReadingItem | null> {
+  const e = await sdk(auth).library.forBook(bookId);
+  return e ? fetchUserBook(auth, e.id) : null;
 }
 
 // A reading-journal entry, event 'quote' or 'note'. PRIVATE by default: the account default is Public, and journal.add
@@ -144,9 +158,11 @@ export const localDate = (d: Date): string =>
 export async function saveProgress(auth: Auth, item: ReadingItem, pages: number): Promise<void> {
   if (!(pages > 0)) throw new Error('refusing to save: no page count');
   const c = sdk(auth);
-  const input = progressInput(item, pages);
-  if (item.read) {
-    await c.request(operations.UpdateUserBookRead, {id: item.read.id, read: input});
+  // A finished read stays as it was: reading the book again starts a new read.
+  const open = item.read?.finished_at ? null : item.read;
+  const input = progressInput({editionId: item.editionId, read: open}, pages);
+  if (open) {
+    await c.request(operations.UpdateUserBookRead, {id: open.id, read: input});
     return;
   }
   const started_at = localDate(new Date());

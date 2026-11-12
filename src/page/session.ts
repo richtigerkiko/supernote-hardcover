@@ -39,6 +39,7 @@ export interface Session {
   onOpen: (f: () => void) => () => void;
   /** Host facts the page needs; plugin.ts replaces them, so src/ui never imports the SDK. */
   isFakeSdk: () => Promise<boolean>;
+  deviceType: () => Promise<number>; // SDK getDeviceType: 0 A5, 1 A6, 2 A6X, 3 A5X, 4 Nomad, 5 Manta
   close: () => void;
 }
 
@@ -54,5 +55,6 @@ export const session: Session = {
     return () => listeners.delete(f);
   },
   isFakeSdk: async () => false,
+  deviceType: async () => -1,
   close: () => {},
 };

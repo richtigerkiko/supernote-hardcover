@@ -42,8 +42,8 @@ type Props = {
 };
 
 export default function EditionPicker({editions, editionId, onPick, onClose}: Props) {
-  const [choice, setChoice] = useState(editionId);
   const shown = editions.filter(e => !e.audio && e.pages > 0);
+  const [choice, setChoice] = useState(shown.some(e => e.id === editionId) ? editionId : (shown[0]?.id ?? '')); // the current one may be hidden
   const hidden = editions.length - shown.length;
   const [query, setQuery] = useState('');
   const found = shown.filter(e => editionMatches(e, query));

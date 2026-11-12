@@ -1,4 +1,4 @@
-import {createJsonFile, createMetaCache, createSettings, type NativeFs} from '../../src/core/store';
+import {createJsonFile, createMetaCache, type NativeFs} from '../../src/core/store';
 
 // The tests poke at arbitrary JSON, so the files are loosely typed.
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -160,15 +160,14 @@ describe('createMetaCache', () => {
   });
 });
 
-describe('createSettings', () => {
-  test('defaults until set; a set value is persisted and read back after a restart', async () => {
-    const n = fakeNative();
-    const s = createSettings(jf(n, '/m/settings.json'), {quotePrivacy: 3});
-    expect(await s.get('quotePrivacy')).toBe(3);
-    await s.set('quotePrivacy', 2);
-    const restarted = createSettings(jf(n, '/m/settings.json'), {quotePrivacy: 3});
-    expect(await restarted.get('quotePrivacy')).toBe(2);
-  });
+test('tracked lists the files whose entry has tracking on', async () => {
+  const n = fakeNative();
+  n.sizes['/a.epub'] = 1;
+  n.sizes['/b.epub'] = 2;
+  const cache = createMetaCache(jf(n, '/d/cache.json'), n.stat);
+  await cache.set('/a.epub', {ids: [], tracking: true});
+  await cache.set('/b.epub', {ids: []});
+  expect(await cache.tracked()).toEqual(['/a.epub']);
 });
 
 describe("createJsonFile strict", () => {

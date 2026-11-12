@@ -9,7 +9,7 @@ import {PRIVACY, privacyName, Segments} from './JournalPage';
 // Book detail page, ported from the design artifact. Presentational only: no SDK imports, everything arrives as props,
 // so it can be designed on the emulator with mock data and unit tested. E-ink rules: black on white, no animation,
 // borders instead of greys, tap targets of at least 48 dp, text of at least 18 sp. The status list and the edition
-// list are full-screen views inside this component (the Nomad ignores a smaller window for a plugin view).
+// list are full-screen views inside this component (the Nomad, the only measured device, ignores a smaller window for a plugin view).
 
 type Props = {
   book: BookDetail;
