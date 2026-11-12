@@ -14,33 +14,36 @@ function bumpOf(message) {
   return null;
 }
 
-function nextVersion(base, code, messages) {
+// versionCode = (major*10000 + minor*100 + patch)*100 + build, build = 1 + the tags this version already has
+// (stable and -dev), so every build of a version gets a higher code than the one before. The installer compares
+// the code alone (probed on the Nomad 2026-11-12) and accepts at least 2000000000.
+// shortcut: minor, patch and the build count must stay below 100, widen the factors when one gets there.
+function nextVersion(base, tags, messages) {
   const bump = messages.map(bumpOf).filter(Boolean).sort((a, b) => RANK[b] - RANK[a])[0];
   if (!bump) return null;
   const [a, b, c] = base.split('.').map(Number);
   const v = bump === 'major' ? [a + 1, 0, 0] : bump === 'minor' ? [a, b + 1, 0] : [a, b, c + 1];
-  return { version: v.join('.'), code: code + 1 };
+  const version = v.join('.');
+  const builds = tags.filter((t) => t.startsWith(`v${version}-`)).length;
+  return { version, code: (v[0] * 10000 + v[1] * 100 + v[2]) * 100 + builds + 1 };
 }
 
-// Base version comes from the latest stable tag vA.B.C-CODE; the code is the highest of all tags, dev
-// pre-releases vA.B.C-CODE-dev included, because the device refuses an equal or lower versionCode.
+// Base version comes from the highest stable tag vA.B.C-CODE (-dev pre-releases are skipped).
 function latestTag(tags) {
-  const stable = tags
+  return tags
     .map((t) => /^v(\d+\.\d+\.\d+)-(\d+)$/.exec(t))
     .filter(Boolean)
     .map((m) => ({ tag: m[0], version: m[1], code: Number(m[2]) }))
     .sort((x, y) => y.code - x.code)[0];
-  if (!stable) return undefined;
-  const devCodes = tags.map((t) => /^v\d+\.\d+\.\d+-(\d+)-dev$/.exec(t)).filter(Boolean).map((m) => Number(m[1]));
-  return { ...stable, code: Math.max(stable.code, ...devCodes) };
 }
 
 if (require.main === module) {
   const git = (...args) => execFileSync('git', args, { encoding: 'utf8' });
-  const tag = latestTag(git('tag', '--list', 'v*').split('\n'));
+  const tags = git('tag', '--list', 'v*').split('\n');
+  const tag = latestTag(tags);
   if (!tag) throw new Error('no vA.B.C-CODE tag found');
   const log = git('log', `${tag.tag}..HEAD`, '--format=%B%x00');
-  const next = nextVersion(tag.version, tag.code, log.split('\0').map((s) => s.trim()).filter(Boolean));
+  const next = nextVersion(tag.version, tags, log.split('\0').map((s) => s.trim()).filter(Boolean));
   if (next) console.log(`${next.version} ${next.code}`);
 }
 
