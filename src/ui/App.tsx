@@ -15,7 +15,7 @@ import JournalPage from './JournalPage';
 import Message from './Message';
 import ReviewPage from './ReviewPage';
 import {MOCK_BOOK, MOCK_JOURNAL, MOCK_LONG, MOCK_REVIEWS} from './preview/mockBook';
-import {BLANK_REVIEW, type BookDetail, type Review} from '../core/types';
+import {BLANK_REVIEW, NOT_READING, type BookDetail, type Review} from '../core/types';
 import {session, type Ask} from '../page/session';
 import {joinEntry, splitEntry} from '../core/journal';
 import {log} from '../core/util';
@@ -98,13 +98,19 @@ function AppInner(): React.JSX.Element {
 
   if (preview === null) return <View />;
   const msg = (e: any) => String(e?.message ?? e);
+  // The page is not reloaded after a toggle or a status change, so the sync line follows them here: tracking on for a
+  // book that is not Currently reading writes nothing (same rule as load()).
+  const idle = (on: boolean, status?: string) => (on && status && status !== 'Currently reading' ? NOT_READING : '');
   const toggle = () => {
     const on = !tracking;
     setTracking(on);
-    session.api?.setTracking(on).catch((e: any) => {
-      setTracking(!on);
-      setSyncNote(`Could not turn tracking ${on ? 'on' : 'off'}: ${msg(e)}`);
-    });
+    session.api?.setTracking(on).then(
+      () => setSyncNote(idle(on, book?.status)),
+      (e: any) => {
+        setTracking(!on);
+        setSyncNote(`Could not turn tracking ${on ? 'on' : 'off'}: ${msg(e)}`);
+      },
+    );
   };
   // editionSaved is set only after the plugin accepted the edition.
   const pickEdition = (editionId: string, b: BookDetail) =>
@@ -238,10 +244,13 @@ function AppInner(): React.JSX.Element {
       onSetStatus={status => {
         const before = book.status;
         setBook({...book, status});
-        session.api?.setStatus(status).catch((e: any) => {
-          setBook(b => (b ? {...b, status: before} : b));
-          setSyncNote(`Could not change the status: ${msg(e)}`);
-        });
+        session.api?.setStatus(status).then(
+          () => setSyncNote(idle(tracking, status)),
+          (e: any) => {
+            setBook(b => (b ? {...b, status: before} : b));
+            setSyncNote(`Could not change the status: ${msg(e)}`);
+          },
+        );
       }}
       onSetEdition={editionId => pickEdition(editionId, book)}
       onAddToLibrary={() =>
