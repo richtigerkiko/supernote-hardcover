@@ -6,7 +6,7 @@ import {OAuthSession} from '@hardcover/sdk/oauth';
 import {name as appName} from '../app.json';
 import CLIENT_ID from './clientId.generated'; // written from the workspace .env by scripts/write-client-id.js
 import {log} from './core/util';
-import {closeView, dialog, isFakeSdk} from './device/host';
+import {closeView, deviceType, dialog, isFakeSdk} from './device/host';
 import {metaCache, native, readEpubMeta, tokenFile} from './device/files';
 import {grants} from './device/permissions';
 import {readSelection, safeSample, sample} from './device/reader';
@@ -36,6 +36,7 @@ const tracking = createTracking({auth, hc, meta, library, grants, dialog, sample
 session.api = createApi({auth, hc, meta, library, tracking, grants, dialog, session, sample: safeSample});
 session.close = closeView;
 session.isFakeSdk = isFakeSdk;
+session.deviceType = deviceType;
 
 // Every gesture starts with one finger-down (action 0) and ends with a plain up (action 1), and the reader flips the page
 // a few ms to ~1 s AFTER the up (measured for tap, finger swipe and two-finger swipe). A read at the up is often the old
