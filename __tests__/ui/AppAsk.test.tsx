@@ -12,6 +12,7 @@ async function open(result: unknown) {
   const api: any = {
     load: jest.fn(async () => result),
     addToLibrary: jest.fn(async () => {}),
+    linkBook: jest.fn(async () => {}),
     searchBooks: jest.fn(async () => [{bookId: 7, title: 'Other', authors: ['X']}]),
     pickBook: jest.fn(async () => ({pick: {bookId: 7, editions: [edition]}})),
   };
@@ -30,6 +31,14 @@ test('{pick}: Use this edition adds the book with the picked edition and does no
   expect(api.addToLibrary).toHaveBeenCalledWith({bookId: 5, editionId: edition.id});
   expect(session.close).not.toHaveBeenCalled();
   expect(api.load).toHaveBeenCalledTimes(2); // reloaded after the add
+});
+
+test('{pick} with link (a PDF book that is not added): Use this edition only links, then reloads', async () => {
+  const {tree, api} = await open({pick: {bookId: 5, editions: [edition], link: true}});
+  await act(async () => button(tree, 'Use this edition').props.onPress());
+  expect(api.linkBook).toHaveBeenCalledWith({bookId: 5, editionId: edition.id});
+  expect(api.addToLibrary).not.toHaveBeenCalled();
+  expect(api.load.mock.calls.length).toBeGreaterThan(1); // reloaded (the earlier test's page is still mounted and reloads too)
 });
 
 test('{pick}: Cancel closes the view and writes nothing', async () => {

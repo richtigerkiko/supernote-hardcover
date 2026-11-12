@@ -77,7 +77,7 @@ Note that `adb shell input tap` does not reach the plugin's touch listener, so p
 | `index.js`, `src/plugin.ts` | Entry point; boot and wiring. |
 | `src/device/` | The only code that touches the Supernote SDK and the native module: reading the open document, permissions, files. |
 | `src/hardcover/` | The Hardcover API client and sign-in. |
-| `src/core/` | Pure logic and shared types: EPUB metadata, book matching, the progress tracker, journal and quote formatting. |
+| `src/core/` | Pure logic and shared types: EPUB metadata (a PDF has none: the reader picks book and edition), book matching, the progress tracker, journal and quote formatting. |
 | `src/page/` | What the plugin does for the pages, built with injected dependencies so tests can pass fakes. |
 | `src/ui/` | The pages (book page, journal, review, edition picker, messages) and the theme. Never imports the SDK. |
 | `android/` | The React Native host app and the `HardcoverNative` module (file read, write, stat). |

@@ -5,7 +5,7 @@ import {Item, styles} from './EditionPicker';
 import {BLACK, Button, TopBar, shared} from './theme';
 
 // Full-screen "Find book" list in the edition picker's style, for a file with no automatic match (or one matched to a book with no page counts): a search field that
-// starts with the EPUB's title and author, and Hardcover's hits as radio rows. The pick is confirmed with the button
+// starts with the EPUB's title and author (empty for a PDF), and Hardcover's hits as radio rows. The pick is confirmed with the button
 // (and then by the add dialog), because a wrong book stays linked to the file.
 
 type Props = {

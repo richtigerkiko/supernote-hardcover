@@ -187,7 +187,7 @@ function AppInner(): React.JSX.Element {
     });
   };
   if (ask && 'pick' in ask) {
-    const {bookId, editions} = ask.pick;
+    const {bookId, editions, link} = ask.pick;
     let picked = false; // "Use this edition" calls onPick and then onClose; only a Cancel closes the view (nothing is written)
     return (
       <EditionPicker
@@ -195,7 +195,8 @@ function AppInner(): React.JSX.Element {
         editionId=""
         onPick={editionId => {
           picked = true;
-          wait('Adding…', session.api!.addToLibrary({bookId, editionId}).then(session.opened)); // reload: the book is now on the shelves
+          // reload: the book is now on the shelves, or (link: a PDF's book that is not added) linked to the file
+          wait(link ? 'Loading…' : 'Adding…', session.api![link ? 'linkBook' : 'addToLibrary']({bookId, editionId}).then(session.opened));
         }}
         onClose={() => {
           if (!picked) session.close();
