@@ -140,6 +140,41 @@ describe('load', () => {
     expect(t.store.get(PATH)?.linked).toBeUndefined();
   });
 
+  // #96: book 5 is a duplicate record with no page count, book 7 the real one.
+  const noPages = (t: ReturnType<typeof setup>) => {
+    const good = t.hc.fetchBookDetail.getMockImplementation()!;
+    t.hc.fetchBookDetail.mockImplementation(async (_a: unknown, bookId: number) =>
+      bookId === 5 ? {...apiBook, editions: [{id: 3, editionFormat: 'Kindle', pages: null, audioSeconds: null}]} : {...(await good()), title: 'Real'},
+    );
+    t.hc.fetchUserBookForBook.mockImplementation(async (_a: unknown, bookId: number) => (bookId === 5 ? item() : null));
+  };
+
+  test('a library entry whose book has no edition with pages opens the book search; the picked book stays after a reload', async () => {
+    const t = setup(); // the entry for book 5 is in the library and matches by title
+    noPages(t);
+    expect(await t.api.load()).toEqual({search: 'Dune Frank Herbert'});
+    await expect(t.api.pickBook(5)).rejects.toThrow('no edition with a page count'); // the dead record again, although it is in the library
+    expect(await t.api.pickBook(7)).toMatchObject({pick: {bookId: 7}});
+    t.hc.addOwned.mockImplementation(async () => (t.hc.fetchUserBookForBook.mockImplementation(async (_a: unknown, id: number) => item(id === 7 ? {userBookId: 10, bookId: 7} : {})), {id: 1, pages: 300}));
+    await t.api.addToLibrary({bookId: 7, editionId: '1'});
+    expect(t.store.get(PATH).linked).toEqual({bookId: 7, editionId: 1});
+
+    const r: any = await t.api.load(); // the entry for book 5 still matches by title: the link wins
+    expect(r.book).toMatchObject({title: 'Real', inLibrary: true});
+    expect(t.hc.fetchBookDetail).toHaveBeenLastCalledWith(t.auth, 7, expect.anything());
+    expect(t.hc.addOwned).toHaveBeenCalledTimes(1); // nothing was written to the entry for book 5
+    expect(t.hc.addOwned).toHaveBeenCalledWith(t.auth, 7, 1);
+    expect(t.hc.setStatus).not.toHaveBeenCalled();
+  });
+
+  test('a linked book with no edition with pages opens the book search too', async () => {
+    const t = setup({list: []});
+    noPages(t);
+    t.store.set(PATH, {title: 'Dune', creator: 'Frank Herbert', ids: [], linked: {bookId: 5, editionId: 3}});
+    expect(await t.api.load()).toEqual({search: 'Dune Frank Herbert'});
+    expect(await t.api.pickBook(7)).toMatchObject({pick: {bookId: 7}});
+  });
+
   test('an EPUB whose title cannot be read keeps its own message', async () => {
     const t = setup({list: []});
     t.store.set(PATH, {ids: [], failed: true});

@@ -36,6 +36,9 @@ type Link = {bookId: number; editionId?: number};
 
 const READING_TTL_MS = 600_000;
 
+// What the book search starts with: the EPUB's title and author.
+export const searchText = (m: FileMeta) => [m.title, m.creator].filter(Boolean).join(' ');
+
 // The books in the library (cached) and which item a file is.
 export function createLibrary({auth, hc, meta, dialog}: {auth: OAuthSession; hc: Client; meta: Meta; dialog: Dialog}) {
   let reading: {at: number; list: ReadingItem[]} = {at: 0, list: []};
@@ -89,11 +92,11 @@ export function createLibrary({auth, hc, meta, dialog}: {auth: OAuthSession; hc:
   async function link(path: string, to: Link): Promise<ReadingItem | Ask | null> {
     const m = await meta.get(path);
     const item = await entryFor(to.bookId); // on the shelves after all: nothing to ask or write
+    const book = await withTimeout(hc.fetchBookDetail(auth, to.bookId), 20_000, 'book details');
+    const editions = toEditions(book);
+    if (!to.editionId && !editions.some(e => !e.audio && e.pages > 0)) return null; // also for a library entry: load() would only reopen the search
     if (!item) {
-      const book = await withTimeout(hc.fetchBookDetail(auth, to.bookId), 20_000, 'book details');
-      const editions = toEditions(book);
       const by = authorsOf(book).slice(0, 2).join(', '); // the rest are mostly translators
-      if (!to.editionId && !editions.some(e => !e.audio && e.pages > 0)) return null;
       if (await dialog(`"${book.title}"${by ? ` by ${by}` : ''} is not in your Hardcover library. Add it as Want to Read and mark your copy as owned?`, 'No', 'Yes', false)) {
         if (!to.editionId) return {pick: {bookId: to.bookId, editions}};
         return (await addToLibrary(path, m, {bookId: to.bookId, editionId: to.editionId})) ?? stub(to);
@@ -104,7 +107,7 @@ export function createLibrary({auth, hc, meta, dialog}: {auth: OAuthSession; hc:
     return withEdition(item ?? stub(to), m.edition)!;
   }
 
-  // A book that the library match did not find: the saved link, else the whole catalogue (catalogueBook), else the book
+  // A linked file, or a book that the library match did not find: the saved link, else the whole catalogue (catalogueBook), else the book
   // search on the page. Only from a button press: a touch never opens a dialog.
   async function linkFromCatalogue(path: string): Promise<ReadingItem | Ask> {
     const m = await meta.get(path);
@@ -115,7 +118,7 @@ export function createLibrary({auth, hc, meta, dialog}: {auth: OAuthSession; hc:
       20_000,
       'catalogue search',
     );
-    return (found && (await link(path, found))) ?? {search: [m.title, m.creator].filter(Boolean).join(' ')};
+    return (found && (await link(path, found))) ?? {search: searchText(m)};
   }
 
   return {drop, list, cached: () => reading.list, resolvePath, addToLibrary, link, linkFromCatalogue};

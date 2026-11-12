@@ -6,7 +6,7 @@
 // does not remount the page: plugin.ts calls opened() on every press and the page reloads its book from it.
 import type {BookDetail as PageBook, CatalogueBook, Edition, Entry, JournalItem, Privacy, PublicReview, Review, Sample} from '../core/types';
 
-/** The page must ask before the book can show: `search` opens the book search with this text (no automatic match), `pick` the edition picker for a book the reader said Yes to adding. */
+/** The page must ask before the book can show: `search` opens the book search with this text (no automatic match, or the matched book has no edition with a page count), `pick` the edition picker for a book the reader said Yes to adding. */
 export type Ask = {search: string} | {pick: {bookId: number; editions: Edition[]}};
 /** What the page shows after load(): a book, a question (Ask), or a message when there is nothing to show. */
 export type LoadResult = {message: string; signIn?: boolean} | {book: PageBook; tracking: boolean; sync: string} | Ask;
