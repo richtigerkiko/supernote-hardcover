@@ -19,7 +19,7 @@ It runs fully on the device. The only network traffic is to Hardcover.
 - **Progress tracking.** Page turns in the open EPUB are sent to Hardcover, forwards and backwards, at most once every 10 seconds per book.
 - **Finds the book by itself.** Title, author and ISBN come from the EPUB's metadata, not the filename, and are matched against your Hardcover library, then the whole Hardcover catalogue.
 - **Uses your edition.** Pick the edition you own and page numbers are computed against it. Font size and orientation don't matter.
-- **Off by default, per book.** A Tracking switch on each book's page decides whether anything is sent.
+- **Off by default, per book.** A Tracking switch on each book's page decides whether your progress is sent.
 - **Book page.** Cover, rating, progress, genres, moods, tags and description, other readers' reviews, and your own journal for the book.
 - **Quotes and notes.** Select text and save it as a quote (with your thoughts, if you like) or write a note. Both go to your Hardcover reading journal with the page you are on. You can edit and remove them from the Journal tab.
 - **Status and review.** Change the reading status, rate the book and write a review.
@@ -34,9 +34,9 @@ It runs fully on the device. The only network traffic is to Hardcover.
 ## Install
 
 1. Download `supernote-hardcover.snplg` from the [latest release](https://github.com/richtigerkiko/supernote-hardcover/releases/latest).
-2. Copy it into the `MyStyle` folder on your Supernote (over USB, or with the Supernote Partner app or Browse & Access).
+2. Copy it into the `MyStyle` folder on your Supernote (for example over USB).
 3. On the Supernote, open **Settings > Apps > Plugins > Select Plugin Package**, select the file and tap **Install**.
-4. Open an EPUB and tap the **Hardcover** button in the toolbar. Allow the permissions the device asks for.
+4. Open an EPUB, tap the **Plugins** icon (the puzzle piece) in the toolbar and choose **Hardcover**. Allow file and internet access if the device asks.
 5. Tap **Sign in**. The page shows a link, a code and a QR code. Scan the QR code with your phone (or open the link on any device and type the code), log in to Hardcover and approve. The Supernote continues by itself.
 6. On the book's page, switch **Tracking** on. That's it: keep reading.
 
@@ -44,7 +44,7 @@ To update, install a newer package the same way. To remove the plugin, use **Uni
 
 ## Usage
 
-**Tracking.** Tracking is per book and starts off. Once it is on, you don't need to press anything: progress follows your page turns. The Hardcover button opens the book's page with the current progress; if a sync failed, the reason is shown under the progress bar.
+**Tracking.** Tracking is per book and starts off. Once it is on, you don't need to press anything: progress follows your page turns. **Plugins > Hardcover** opens the book's page with the current progress; if a sync failed, the reason is shown under the progress bar.
 
 **Books not in your library.** If the open book is not in your Hardcover library, the plugin looks it up in the Hardcover catalogue and asks once whether to add it (as Want to Read, with your copy marked as owned). If you say no, the book page and the journal still work, and an **Add to library** button replaces tracking and status.
 
@@ -63,17 +63,17 @@ To update, install a newer package the same way. To remove the plugin, use **Uni
 - **"This book is not in your Hardcover library."** Hardcover's catalogue has no match for the title, author or ISBN in the file. Check the EPUB's metadata (for example with Calibre), or add the book on hardcover.app first.
 - **"Could not read this EPUB's title and author."** The file has no usable metadata. Fix it with Calibre and copy the file again.
 - **"Hardcover has no edition with a page count for this book."** Progress needs a page count. Add one to an edition on hardcover.app.
-- **"Signed out, tracking stopped"**, or a message that the sign-in has expired: tap the Hardcover button and sign in again, then check that Tracking is still on.
+- **"Signed out, tracking stopped"**, or a message that the sign-in has expired: open Plugins > Hardcover and sign in again, then check that Tracking is still on.
 - **"This version needs a new sign-in with more access."** A newer version uses more of Hardcover's API than you approved earlier. Sign in again.
 - **Nothing arrives on Hardcover.** Check Wi-Fi, that Tracking is on for this book, and the line under the progress bar on the book page.
 - **"This plugin version is too low."** The device already has the same or a newer version installed.
 
 ## Privacy
 
-- The plugin talks only to Hardcover (`hardcover.app`). There is no other server, no analytics and no telemetry.
+- The plugin talks only to Hardcover (`hardcover.app` and its API and image servers). There is no other server, no analytics and no telemetry.
 - You sign in on Hardcover's own site. The plugin never sees your password; it stores the access tokens Hardcover issues in its private folder on the device, and nowhere else.
 - It reads the title, author and ISBN from the EPUB you have open. Book files and their text never leave the device, except a passage you choose to save as a quote.
-- Nothing is sent for a book until you switch Tracking on. Progress updates then appear on Hardcover like any other progress update, with your account's privacy setting. Quotes and notes are private unless you choose otherwise.
+- Opening the Hardcover page looks the book up (by ISBN, title and author) in your library and in Hardcover's catalogue. No reading progress is sent for a book until you switch Tracking on. Progress updates then appear on Hardcover like any other progress update, with your account's privacy setting. Quotes and notes are private unless you choose otherwise.
 
 ## Contributing
 
