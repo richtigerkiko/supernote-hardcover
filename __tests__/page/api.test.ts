@@ -2,6 +2,7 @@ import {createApi} from '../../src/page/api';
 import {createLibrary} from '../../src/page/library';
 import {createMeta} from '../../src/page/meta';
 import {session} from '../../src/page/session';
+import {SCOPES} from '../../src/hardcover/auth';
 import type {ReadingItem} from '../../src/core/types';
 
 const PATH = '/b.epub';
@@ -13,7 +14,7 @@ const apiBook = {
   editions: [{id: 1, editionFormat: 'Paperback', pages: 300, audioSeconds: null, publisher: null, language: null}],
 };
 
-function setup({list = [item()], scope = 'write:reviews read:library', dialogYes = true, sampled = true} = {}) {
+function setup({list = [item()], scope = SCOPES.join(' '), dialogYes = true, sampled = true} = {}) {
   const hc: any = {
     fetchUserBooks: jest.fn(async () => list),
     bookIdsForIsbns: jest.fn(async () => []),
@@ -37,9 +38,9 @@ function setup({list = [item()], scope = 'write:reviews read:library', dialogYes
   const library = createLibrary({auth, hc, meta, dialog});
   const tracking: any = {syncNote: () => 'note', tracker: {forget: jest.fn()}, resume: jest.fn()};
   const grants: any = {need: jest.fn(async () => {})};
-  const sess: any = {pending: null, selection: null};
+  const sess: any = {pending: null, selection: null, opened: jest.fn()};
   const api = createApi({auth, hc, meta, library, tracking, grants, dialog, session: sess, sample: async () => (sampled ? {path: PATH, page: 149, total: 300} : null)});
-  return {api, hc, auth, dialog, tracking, store};
+  return {api, hc, auth, dialog, tracking, store, sess};
 }
 
 describe('load', () => {
@@ -113,9 +114,30 @@ describe('review calls', () => {
     expect(t.hc.fetchReview).toHaveBeenCalledWith(t.auth, 9);
   });
 
-  test('a sign-in without write:reviews is dropped after the dialog; Cancel keeps it', async () => {
+  test('a sign-in without read:journal posts nothing: dialog, sign out, reload; Cancel keeps it', async () => {
+    const t = setup({scope: SCOPES.filter(x => x !== 'read:journal').join(' '), dialogYes: false});
+    await t.api.load(); // "Later" to the load() prompt
+    t.dialog.mockResolvedValue(true);
+    const entry = {event: 'note' as const, passage: '', text: 'hi', privacy: 3 as const};
+    await expect(t.api.saveJournal(entry)).rejects.toThrow('new sign-in');
+    expect(t.auth.signOut).toHaveBeenCalled();
+    t.dialog.mockResolvedValue(false);
+    await expect(t.api.saveJournal(entry)).rejects.toThrow('new sign-in');
+    expect(t.hc.saveJournal).not.toHaveBeenCalled();
+  });
+
+  test('load offers a new sign-in once when a scope is missing', async () => {
     const t = setup({scope: 'read:library'});
-    await t.api.load();
+    expect(await t.api.load()).toEqual({message: expect.any(String), signIn: true});
+    expect(t.auth.signOut).toHaveBeenCalledTimes(1);
+    expect(await t.api.load()).toMatchObject({book: expect.anything()}); // not asked again this session
+    expect(t.dialog).toHaveBeenCalledTimes(1);
+  });
+
+  test('a sign-in without write:reviews is dropped after the dialog; Cancel keeps it', async () => {
+    const t = setup({scope: SCOPES.filter(x => x !== 'write:reviews').join(' '), dialogYes: false});
+    await t.api.load(); // "Later" to the load() prompt
+    t.dialog.mockResolvedValue(true);
     expect(await t.api.writeReview()).toBe(false);
     expect(t.auth.signOut).toHaveBeenCalled();
     t.auth.signOut.mockClear();

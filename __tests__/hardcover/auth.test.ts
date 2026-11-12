@@ -44,4 +44,6 @@ test('hasScope finds a scope in the space-separated grant', () => {
   expect(hasScope('read:library write:reviews', 'write:reviews')).toBe(true);
   expect(hasScope('read:library write:library', 'write:reviews')).toBe(false);
   expect(hasScope(undefined, 'write:reviews')).toBe(false);
+  expect(hasScope('read:library write:library', 'read:journal')).toBe(false);
+  expect(require('../../src/hardcover/auth').SCOPES).toContain('read:journal');
 });

@@ -2,7 +2,7 @@ import {SignedOutError, type OAuthSession} from '@hardcover/sdk/oauth';
 import {createTracker} from '../core/tracker';
 import type {Grants, Sample} from '../core/types';
 import {log} from '../core/util';
-import type {Client, Library} from './library';
+import type {Client, Dialog, Library} from './library';
 import type {Meta} from './meta';
 
 const HUNG_MS = 10_000;
@@ -18,6 +18,7 @@ export function createTracking(d: {
   meta: Meta;
   library: Library;
   grants: Grants;
+  dialog: Dialog;
   sample: () => Promise<Sample | null>;
   enabled: boolean;
 }) {
@@ -41,13 +42,17 @@ export function createTracking(d: {
     },
   });
 
-  // A lost sign-in (or a 401 the refresh could not fix) will not mend itself: stop instead of retrying on every touch.
+  // A lost sign-in (or a 401 the refresh could not fix) will not mend itself: stop instead of retrying on every touch, and
+  // tell the reader once (works from a touch handler too). OAuthSession.signOut() does not call onSignedOut, only a lost sign-in does.
+  function signInLost() {
+    if (!ok) return;
+    ok = false;
+    log('signed out: tracking stopped');
+    d.dialog('Your Hardcover sign-in has expired, so tracking is off. Press the Hardcover button to sign in again.', 'Close', 'OK', false).catch(() => {});
+  }
   function stopIfTokenRejected() {
     const e = tracker.state.lastError;
-    if (ok && (e?.status === 401 || e instanceof SignedOutError)) {
-      ok = false;
-      log('signed out: tracking stopped');
-    }
+    if (e?.status === 401 || e instanceof SignedOutError) signInLost();
   }
 
   function onTouch() {
@@ -87,9 +92,7 @@ export function createTracking(d: {
     tracker,
     onTouch,
     syncNote,
-    stop: () => {
-      ok = false;
-    },
+    stop: signInLost,
     /** After a sign-in: tracking runs again, from a clean state. */
     resume: () => {
       ok = d.enabled;
