@@ -2,12 +2,16 @@ name: Release
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: write
 concurrency: { group: release, cancel-in-progress: false }
 jobs:
   release:
+    # fork PRs get no secrets, so no usable build
+    if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'dev')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -70,6 +74,6 @@ jobs:
         run: |
           tag="v${{ steps.ver.outputs.version }}-${{ steps.ver.outputs.code }}"
           flags=""
-          # manual runs on any branch but main publish a pre-release for testers
+          # PR runs (dev to main) and manual runs on any branch but main publish a pre-release for testers
           if [ "$GITHUB_REF_NAME" != main ]; then tag="$tag-dev"; flags="--prerelease"; fi
-          gh release create "$tag" build/outputs/supernote-hardcover.snplg --target "$GITHUB_SHA" --generate-notes $flags
+          gh release create "$tag" build/outputs/supernote-hardcover.snplg --target "${{ github.event.pull_request.head.sha || github.sha }}" --generate-notes $flags
