@@ -1,8 +1,10 @@
 import React, {useEffect, useState} from 'react';
-import {STATUSES, type BookDetail, type PublicReview} from '../core/types';
-import {Image, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {STATUSES, type BookDetail, type JournalItem, type Privacy, type PublicReview} from '../core/types';
+import {splitEntry} from '../core/journal';
+import {Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import EditionPicker, {Item, TopBar} from './EditionPicker';
 import {BLACK, WHITE, shared} from './theme';
+import {PRIVACY, privacyName, Segments} from './JournalPage';
 
 // Book detail page, ported from the design artifact. Presentational only: no SDK imports, everything arrives as props,
 // so it can be designed on the emulator with mock data and unit tested. E-ink rules: black on white, no animation,
@@ -20,6 +22,9 @@ type Props = {
   onSetEdition: (editionId: string) => void;
   onAddToLibrary?: () => void; // only used when book.inLibrary is false
   onLoadReviews?: (offset: number) => Promise<{reviews: PublicReview[]; hasMore: boolean}>; // 10 at a time, first call on first open of the Reviews tab
+  onLoadJournal?: (offset: number) => Promise<{entries: JournalItem[]; hasMore: boolean}>; // 100 at a time, first call on first open of the Journal tab
+  onEditJournal?: (item: JournalItem, text: string, privacy: Privacy) => Promise<string>; // resolves with the whole new entry text
+  onRemoveJournal?: (id: number) => Promise<void>;
 };
 
 const stars = (rating: number) => {
@@ -158,18 +163,97 @@ function ReviewEntry({r, onMore}: {r: PublicReview; onMore: () => void}) {
 type Reviews = {items: PublicReview[]; hasMore: boolean; loaded: boolean; state: 'idle' | 'loading' | 'error'};
 const NO_REVIEWS: Reviews = {items: [], hasMore: false, loaded: false, state: 'idle'};
 
-export default function DetailPage({book, tracking, syncNote, onToggleTracking, onClose, onWriteReview, onSetStatus, onSetEdition, onAddToLibrary, onLoadReviews}: Props) {
+// One note or quote with Edit and Remove. Edit and the "cannot be undone" confirmation are inline, so the list stays where it is.
+function JournalRow({item, onEdit, onRemove}: {item: JournalItem; onEdit: (text: string, privacy: Privacy) => Promise<void>; onRemove: () => Promise<void>}) {
+  const {passage, thoughts} = splitEntry(item.event, item.entry);
+  const [mode, setMode] = useState<'view' | 'edit' | 'remove'>('view');
+  const [text, setText] = useState(thoughts);
+  const [privacy, setPrivacy] = useState<Privacy>(item.privacy);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const run = async (f: () => Promise<void>, fail: string) => {
+    setBusy(true);
+    setError('');
+    try {
+      await f();
+      setMode('view');
+    } catch (e: any) {
+      setError(e?.message || fail);
+    }
+    setBusy(false);
+  };
+  const empty = item.event === 'note' && !text.trim();
+  const btn = (label: string, onPress: () => unknown, on = false, disabled = false) => (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{disabled}} disabled={disabled} style={[styles.jbtn, on && !disabled && styles.jbtnOn]} onPress={() => void onPress()}>
+      <Text style={[styles.moreText, on && !disabled && {color: WHITE}]}>{label}</Text>
+    </Pressable>
+  );
+  return (
+    <View style={styles.rv}>
+      <View style={styles.rvLine}>
+        <Pill text={item.event === 'quote' ? 'Quote' : 'Note'} />
+        <Text style={styles.rvDate}>{join([item.page ? `p. ${item.page}` : '', item.date, privacyName(item.privacy)])}</Text>
+      </View>
+      {passage ? <Text style={styles.jquote}>{passage}</Text> : null}
+      {mode === 'edit' ? (
+        <>
+          <TextInput
+            style={styles.jinput}
+            multiline
+            textAlignVertical="top"
+            editable={!busy}
+            accessibilityLabel={item.event === 'quote' ? 'Your thoughts' : 'Note text'}
+            placeholder={item.event === 'quote' ? 'Add your thoughts (optional)…' : 'Write a note…'}
+            placeholderTextColor={BLACK}
+            value={text}
+            onChangeText={setText}
+          />
+          <Segments options={PRIVACY} value={privacy} onPick={setPrivacy} role="radio" disabled={busy} />
+        </>
+      ) : thoughts ? (
+        <Text style={styles.rvText}>{thoughts}</Text>
+      ) : null}
+      {mode === 'remove' ? <Text style={[styles.rvText, styles.bold]}>Remove this entry? This cannot be undone.</Text> : null}
+      {error ? <Text style={[styles.rvText, styles.bold]}>{error}</Text> : null}
+      <View style={styles.jbtns}>
+        {mode === 'view' ? (
+          <>
+            {btn('Edit', () => (setText(thoughts), setPrivacy(item.privacy), setError(''), setMode('edit')))}
+            {btn('Remove', () => (setError(''), setMode('remove')))}
+          </>
+        ) : mode === 'edit' ? (
+          <>
+            {btn('Cancel', () => (setError(''), setMode('view')), false, busy)}
+            {btn(busy ? 'Saving…' : error ? 'Retry' : 'Save', () => run(() => onEdit(text.trim(), privacy), 'Could not save.'), true, busy || empty)}
+          </>
+        ) : (
+          <>
+            {btn('Cancel', () => (setError(''), setMode('view')), false, busy)}
+            {btn(busy ? 'Removing…' : error ? 'Retry' : 'Remove entry', () => run(onRemove, 'Could not remove.'), true, busy)}
+          </>
+        )}
+      </View>
+    </View>
+  );
+}
+
+type Journal = {items: JournalItem[]; hasMore: boolean; loaded: boolean; state: 'idle' | 'loading' | 'error'};
+const NO_JOURNAL: Journal = {items: [], hasMore: false, loaded: false, state: 'idle'};
+
+export default function DetailPage({book, tracking, syncNote, onToggleTracking, onClose, onWriteReview, onSetStatus, onSetEdition, onAddToLibrary, onLoadReviews, onLoadJournal, onEditJournal, onRemoveJournal}: Props) {
   const inLibrary = book.inLibrary !== false;
   const [view, setView] = useState<'detail' | 'status' | 'editions' | 'cover'>('detail');
   const [aboutOpen, setAboutOpen] = useState(false);
   const [aboutLong, setAboutLong] = useState(false);
-  const [tab, setTab] = useState<'about' | 'reviews'>('about');
+  const [tab, setTab] = useState<'about' | 'reviews' | 'journal'>('about');
   const [rv, setRv] = useState<Reviews>(NO_REVIEWS);
   const [openReview, setOpenReview] = useState<PublicReview | null>(null);
+  const [jn, setJn] = useState<Journal>(NO_JOURNAL);
 
   useEffect(() => {
     setTab('about'); // another book was loaded
     setRv(NO_REVIEWS);
+    setJn(NO_JOURNAL);
     setOpenReview(null);
   }, [book.title]);
 
@@ -186,6 +270,18 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
     if (!rv.loaded && rv.state === 'idle') loadReviews();
   };
 
+  const loadJournal = () => {
+    if (!onLoadJournal || jn.state === 'loading') return;
+    setJn(j => ({...j, state: 'loading'}));
+    onLoadJournal(jn.items.length).then( // removals delete on the server too, so the next page starts at what is left
+      p => setJn(j => ({items: [...j.items, ...p.entries], hasMore: p.hasMore, loaded: true, state: 'idle'})),
+      () => setJn(j => ({...j, state: 'error'})),
+    );
+  };
+  const showJournal = () => {
+    setTab('journal');
+    if (!jn.loaded && jn.state === 'idle') loadJournal();
+  };
   const ed = book.editions.find(e => e.id === book.editionId) ?? book.editions[0];
 
   if (view === 'status') {
@@ -295,6 +391,9 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
           <Pressable accessibilityRole="tab" accessibilityLabel="Reviews tab" accessibilityState={{selected: tab === 'reviews'}} style={[styles.tab, tab === 'reviews' && styles.tabOn]} onPress={showReviews}>
             <Text style={[styles.tabText, tab === 'reviews' && styles.tabTextOn]}>Reviews</Text>
           </Pressable>
+          <Pressable accessibilityRole="tab" accessibilityLabel="Journal tab" accessibilityState={{selected: tab === 'journal'}} style={[styles.tab, tab === 'journal' && styles.tabOn]} onPress={showJournal}>
+            <Text style={[styles.tabText, tab === 'journal' && styles.tabTextOn]}>Journal</Text>
+          </Pressable>
         </View>
 
         {tab === 'reviews' ? (
@@ -314,6 +413,38 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
             {rv.loaded && !rv.items.length && rv.state === 'idle' ? <Text style={styles.status}>No reviews yet.</Text> : null}
             {rv.hasMore && rv.state === 'idle' ? (
               <Pressable accessibilityRole="button" style={styles.more} onPress={loadReviews}>
+                <Text style={styles.moreText}>Load more</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : tab === 'journal' ? (
+          <View>
+            {jn.items.map(j => (
+              <JournalRow
+                key={j.id}
+                item={j}
+                onEdit={async (text, privacy) => {
+                  const entry = await onEditJournal!(j, text, privacy);
+                  setJn(x => ({...x, items: x.items.map(i => (i.id === j.id ? {...i, entry, privacy} : i))}));
+                }}
+                onRemove={async () => {
+                  await onRemoveJournal!(j.id);
+                  setJn(x => ({...x, items: x.items.filter(i => i.id !== j.id)}));
+                }}
+              />
+            ))}
+            {jn.state === 'loading' ? <Text style={styles.status}>{jn.items.length ? 'Loading more…' : 'Loading journal…'}</Text> : null}
+            {jn.state === 'error' ? (
+              <>
+                <Text style={styles.status}>Could not load the journal.</Text>
+                <Pressable accessibilityRole="button" style={styles.more} onPress={loadJournal}>
+                  <Text style={styles.moreText}>Retry</Text>
+                </Pressable>
+              </>
+            ) : null}
+            {jn.loaded && !jn.items.length && jn.state === 'idle' ? <Text style={styles.status}>No journal entries yet.</Text> : null}
+            {jn.hasMore && jn.state === 'idle' ? (
+              <Pressable accessibilityRole="button" style={styles.more} onPress={loadJournal}>
                 <Text style={styles.moreText}>Load more</Text>
               </Pressable>
             ) : null}
@@ -449,6 +580,11 @@ const styles = StyleSheet.create({
   rvText: {fontSize: 21, lineHeight: 30, color: BLACK, marginTop: 4},
   rvBook: {fontSize: 18, color: BLACK, marginBottom: 6},
   rvFull: {marginTop: 12},
+  jquote: {fontSize: 21, lineHeight: 30, fontStyle: 'italic', borderLeftWidth: 3, borderColor: BLACK, paddingLeft: 14, color: BLACK, marginTop: 6},
+  jinput: {minHeight: 3 * 30 + 24, fontSize: 21, lineHeight: 30, borderWidth: 2, borderColor: BLACK, padding: 12, color: BLACK, marginVertical: 8},
+  jbtns: {flexDirection: 'row', gap: 12, marginTop: 8},
+  jbtn: {height: 56, paddingHorizontal: 24, borderWidth: 2, borderColor: BLACK, justifyContent: 'center', backgroundColor: WHITE},
+  jbtnOn: {backgroundColor: BLACK},
   pill: {borderWidth: 1.5, borderColor: BLACK, borderRadius: 14, paddingHorizontal: 9, height: 26, justifyContent: 'center', marginRight: 6},
   pillText: {fontSize: 18, color: BLACK, includeFontPadding: false},
   actions: shared.actions,

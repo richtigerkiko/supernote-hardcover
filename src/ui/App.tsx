@@ -12,9 +12,10 @@ import DetailPage from './DetailPage';
 import JournalPage from './JournalPage';
 import Message from './Message';
 import ReviewPage from './ReviewPage';
-import {MOCK_BOOK, MOCK_LONG, MOCK_REVIEWS} from './preview/mockBook';
+import {MOCK_BOOK, MOCK_JOURNAL, MOCK_LONG, MOCK_REVIEWS} from './preview/mockBook';
 import {BLANK_REVIEW, type BookDetail, type Review} from '../core/types';
 import {session} from '../page/session';
+import {joinEntry, splitEntry} from '../core/journal';
 import {log} from '../core/util';
 import {Scaled, windowFacts} from './theme';
 
@@ -128,6 +129,9 @@ function AppInner(): React.JSX.Element {
         onClose={() => setJournal({passage: 'Call me Ishmael. Some years ago, never mind how long precisely, having little or no money in my purse, I thought I would sail about a little and see the watery part of the world.'})}
         onWriteReview={() => setReview(BLANK_REVIEW)}
         onLoadReviews={() => Promise.resolve({reviews: MOCK_REVIEWS, hasMore: false})}
+        onLoadJournal={() => Promise.resolve({entries: MOCK_JOURNAL, hasMore: false})}
+        onEditJournal={(item, text) => Promise.resolve(item.event === 'note' ? text : joinEntry(splitEntry('quote', item.entry).passage, text))}
+        onRemoveJournal={() => flaky()}
         onSetStatus={status => setBook({...(book ?? MOCK_BOOK), status})}
         onSetEdition={editionId => setBook({...(book ?? MOCK_BOOK), editionId, editionSaved: true})}
       />
@@ -183,6 +187,9 @@ ${code}`);
         )
       }
       onLoadReviews={offset => session.api!.loadReviews(offset)}
+      onLoadJournal={offset => session.api!.loadJournal(offset)}
+      onEditJournal={(item, text, privacy) => session.api!.editJournal(item, text, privacy)}
+      onRemoveJournal={id => session.api!.removeJournal(id)}
       onSetStatus={status => {
         const before = book.status;
         setBook({...book, status});

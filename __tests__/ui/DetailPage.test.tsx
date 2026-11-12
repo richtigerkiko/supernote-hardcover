@@ -202,3 +202,83 @@ describe('reviews tab', () => {
     expect(all(tree)).not.toContain('SECRET full text');
   });
 });
+
+describe('journal tab', () => {
+  const flush = () => act(async () => {});
+  const q = {id: 1, event: 'quote' as const, entry: 'A passage\n\n━━━\n\nmy thoughts', page: 83, date: '2026-11-10', privacy: 3 as const};
+  const n = {id: 2, event: 'note' as const, entry: 'a note', page: null, date: '2026-11-09', privacy: 1 as const};
+  const opened = async (props: any = {}) => {
+    const tree = render({onLoadJournal: jest.fn().mockResolvedValue({entries: [q, n], hasMore: false}), onEditJournal: jest.fn(async (_i: any, t: string) => t), onRemoveJournal: jest.fn(async () => {}), ...props});
+    press(tree, 'Journal tab');
+    await flush();
+    return tree;
+  };
+  const pressAt = (tree: any, label: string) => act(() => tree.root.findAll((x: any) => x.props.accessibilityLabel === label && x.props.onPress)[0].props.onPress());
+
+  test('lists notes and quotes with page, date, privacy and the split text', async () => {
+    const t = all(await opened());
+    expect(t).toContain('Quote');
+    expect(t).toContain('p. 83 · 2026-11-10 · Private');
+    expect(t).toContain('A passage');
+    expect(t).toContain('my thoughts');
+    expect(t).not.toContain('━');
+    expect(t).toContain('a note');
+  });
+
+  test('empty, and error with Retry', async () => {
+    expect(all(await opened({onLoadJournal: jest.fn().mockResolvedValue({entries: [], hasMore: false})}))).toContain('No journal entries yet.');
+    const tree = await opened({onLoadJournal: jest.fn().mockRejectedValueOnce(new Error('x')).mockResolvedValue({entries: [n], hasMore: false})});
+    expect(all(tree)).toContain('Could not load the journal.');
+    act(() => tree.root.findAll((x: any) => x.props.onPress && texts(x).includes('Retry'))[0].props.onPress());
+    await flush();
+    expect(all(tree)).toContain('a note');
+  });
+
+  test('edit saves thoughts and privacy and the row updates; a failed save shows the error and keeps the row', async () => {
+    const onEditJournal = jest.fn().mockRejectedValueOnce(new Error('Network request failed')).mockImplementation(async (_i: any, t: string) => 'A passage\n\n━━━\n\n' + t);
+    const tree = await opened({onEditJournal});
+    pressAt(tree, 'Edit');
+    act(() => tree.root.findByProps({accessibilityLabel: 'Your thoughts'}).props.onChangeText('better'));
+    pressAt(tree, 'Save');
+    await flush();
+    expect(all(tree)).toContain('Network request failed');
+    pressAt(tree, 'Retry');
+    await flush();
+    expect(onEditJournal).toHaveBeenLastCalledWith(q, 'better', 3);
+    expect(all(tree)).toContain('better');
+    expect(all(tree)).not.toContain('my thoughts');
+  });
+
+  test('remove asks first, then deletes and drops the row; a failure leaves it', async () => {
+    const onRemoveJournal = jest.fn().mockRejectedValueOnce(new Error('boom')).mockResolvedValue(undefined);
+    const tree = await opened({onRemoveJournal});
+    pressAt(tree, 'Remove');
+    expect(all(tree)).toContain('This cannot be undone.');
+    expect(onRemoveJournal).not.toHaveBeenCalled();
+    pressAt(tree, 'Remove entry');
+    await flush();
+    expect(all(tree)).toContain('boom');
+    expect(all(tree)).toContain('A passage');
+    pressAt(tree, 'Retry');
+    await flush();
+    expect(onRemoveJournal).toHaveBeenCalledWith(1);
+    expect(all(tree)).not.toContain('A passage');
+    expect(all(tree)).toContain('a note');
+  });
+});
+
+test('journal Load more offsets by rows left after a removal (the server deleted it too)', async () => {
+  const e = (id: number) => ({id, event: 'note' as const, entry: `n${id}`, page: null, date: '2026-11-09', privacy: 3 as const});
+  const onLoadJournal = jest.fn().mockResolvedValueOnce({entries: [e(1), e(2)], hasMore: true}).mockResolvedValue({entries: [], hasMore: false});
+  const tree = render({onLoadJournal, onRemoveJournal: jest.fn(async () => {})});
+  const flush = () => act(async () => {});
+  press(tree, 'Journal tab');
+  await flush();
+  const at = (label: string) => act(() => tree.root.findAll((x: any) => x.props.accessibilityLabel === label && x.props.onPress)[0].props.onPress());
+  at('Remove');
+  at('Remove entry');
+  await flush();
+  act(() => tree.root.findAll((x: any) => x.props.onPress && texts(x).includes('Load more'))[0].props.onPress());
+  await flush();
+  expect(onLoadJournal.mock.calls.map(c => c[0])).toEqual([0, 1]);
+});

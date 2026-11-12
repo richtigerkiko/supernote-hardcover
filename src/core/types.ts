@@ -79,6 +79,8 @@ export type BookDetail = {
 };
 
 export type Privacy = 1 | 2 | 3;
+// One note or quote of the reader's journal as Hardcover holds it (`entry` is the whole text, see core/journal.ts splitEntry).
+export type JournalItem = {id: number; event: 'quote' | 'note'; entry: string; page: number | null; date: string; privacy: Privacy};
 export type Entry = {event: 'quote' | 'note'; passage: string; text: string; privacy: Privacy};
 
 export type Review = {markdown: string; hasSpoilers: boolean; sponsored: boolean; notes: string; rating?: number};

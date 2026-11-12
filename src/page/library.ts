@@ -11,9 +11,11 @@ import type {Meta} from './meta';
 export type Client = Pick<
   typeof client,
   | 'addOwned'
+  | 'deleteJournal'
   | 'bookIdsForIsbns'
   | 'editionsForIsbns'
   | 'fetchBookDetail'
+  | 'fetchJournal'
   | 'fetchReview'
   | 'fetchReviews'
   | 'fetchUserBook'
@@ -24,6 +26,7 @@ export type Client = Pick<
   | 'saveReview'
   | 'searchBooks'
   | 'setStatus'
+  | 'updateJournal'
 >;
 export type Dialog = (tip: string, left: string, right: string, ok: boolean) => Promise<unknown>;
 

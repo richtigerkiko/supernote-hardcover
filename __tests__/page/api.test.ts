@@ -27,6 +27,9 @@ function setup({list = [item()], scope = SCOPES.join(' '), dialogYes = true, sam
     fetchReviews: jest.fn(async () => ({reviews: [], hasMore: false})),
     setStatus: jest.fn(async () => {}),
     saveJournal: jest.fn(async () => {}),
+    fetchJournal: jest.fn(async () => ({entries: [], hasMore: false})),
+    updateJournal: jest.fn(async () => {}),
+    deleteJournal: jest.fn(async () => {}),
   };
   const store = new Map();
   const meta = createMeta({
@@ -145,6 +148,31 @@ describe('add to library', () => {
     expect(t.hc.addOwned).toHaveBeenCalledWith(t.auth, 5, undefined);
     expect(t.store.get(PATH).linked).toBeUndefined();
     expect(t.tracking.tracker.forget).toHaveBeenCalledWith(PATH);
+  });
+});
+
+describe('journal calls', () => {
+  const quote = {id: 4, event: 'quote' as const, entry: 'line one\nline two\n\n━━━\n\nold', page: 3, date: '2026-11-10', privacy: 3 as const};
+
+  test('load, edit and remove use the loaded book; an edited quote keeps its passage as stored', async () => {
+    const t = setup();
+    await expect(t.api.loadJournal(0)).rejects.toThrow('no book loaded');
+    await t.api.load();
+    await t.api.loadJournal(100);
+    expect(t.hc.fetchJournal).toHaveBeenCalledWith(t.auth, 5, 100);
+    expect(await t.api.editJournal(quote, ' new ', 1)).toBe('line one\nline two\n\n━━━\n\nnew');
+    expect(t.hc.updateJournal).toHaveBeenCalledWith(t.auth, 4, {entry: 'line one\nline two\n\n━━━\n\nnew', privacy: 1});
+    await t.api.removeJournal(4);
+    expect(t.hc.deleteJournal).toHaveBeenCalledWith(t.auth, 4);
+  });
+
+  test('a sign-in without read:journal is dropped for a new one; nothing is fetched', async () => {
+    const t = setup({scope: SCOPES.filter(x => x !== 'read:journal').join(' '), dialogYes: false});
+    await t.api.load();
+    t.dialog.mockResolvedValue(true);
+    await expect(t.api.loadJournal(0)).rejects.toThrow('new sign-in');
+    expect(t.auth.signOut).toHaveBeenCalled();
+    expect(t.hc.fetchJournal).not.toHaveBeenCalled();
   });
 });
 

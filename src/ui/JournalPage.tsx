@@ -15,14 +15,14 @@ type Props = {
   onClose: () => void;
 };
 
-const PRIVACY: [Privacy, string][] = [
+export const PRIVACY: [Privacy, string][] = [
   [1, 'Public'],
   [2, 'Follows'],
   [3, 'Private'],
 ];
-const privacyName = (p: Privacy) => PRIVACY.find(([v]) => v === p)![1];
+export const privacyName = (p: Privacy) => PRIVACY.find(([v]) => v === p)![1];
 
-function Segments<T>({options, value, onPick, role, disabled}: {options: [T, string][]; value: T; onPick: (v: T) => void; role: 'tab' | 'radio'; disabled: boolean}) {
+export function Segments<T>({options, value, onPick, role, disabled}: {options: [T, string][]; value: T; onPick: (v: T) => void; role: 'tab' | 'radio'; disabled: boolean}) {
   return (
     <View style={styles.segments}>
       {options.map(([v, label], i) => {
