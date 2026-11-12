@@ -279,5 +279,6 @@ test('journal Load more offsets by rows left after a removal (the server deleted
   at('Remove entry');
   await flush();
   act(() => tree.root.findAll((x: any) => x.props.onPress && texts(x).includes('Load more'))[0].props.onPress());
+  await flush();
   expect(onLoadJournal.mock.calls.map(c => c[0])).toEqual([0, 1]);
 });
