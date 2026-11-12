@@ -3,7 +3,7 @@
 [![Latest release](https://img.shields.io/github/v/release/richtigerkiko/supernote-hardcover)](https://github.com/richtigerkiko/supernote-hardcover/releases/latest)
 [![License: MIT](https://img.shields.io/github/license/richtigerkiko/supernote-hardcover)](LICENSE)
 
-A Supernote plugin that keeps your [Hardcover](https://hardcover.app) reading progress up to date while you read EPUBs. Switch it on for a book, then just read.
+A Supernote plugin that keeps your [Hardcover](https://hardcover.app) reading progress up to date while you read EPUBs and PDFs. Switch it on for a book, then just read.
 
 <p>
   <img src="docs/images/book-page.png" width="200" alt="The book page: cover, edition, progress, genres and description">
@@ -23,14 +23,14 @@ A Supernote plugin that keeps your [Hardcover](https://hardcover.app) reading pr
 
 - A Supernote with plugin support. Only the **Nomad** is tested ([#38](https://github.com/richtigerkiko/supernote-hardcover/issues/38)).
 - A [Hardcover](https://hardcover.app) account and Wi-Fi.
-- Books as EPUB files ([#16](https://github.com/richtigerkiko/supernote-hardcover/issues/16)).
+- Books as EPUB or PDF files.
 
 ## Install
 
 1. Download `supernote-hardcover.snplg` from the [latest release](https://github.com/richtigerkiko/supernote-hardcover/releases/latest).
 2. Copy it into the `MyStyle` folder on your Supernote.
 3. On the Supernote: **Settings > Apps > Plugins > Select Plugin Package**, select the file, tap **Install**.
-4. Open an EPUB, tap the **Plugins** icon (puzzle piece) in the toolbar and choose **Hardcover**. Allow file and internet access if asked.
+4. Open an EPUB or PDF, tap the **Plugins** icon (puzzle piece) in the toolbar and choose **Hardcover**. Allow file and internet access if asked.
 5. Tap **Sign in** and scan the QR code with your phone, or open the link shown and type the code.
 6. Switch **Tracking** on.
 
@@ -47,6 +47,7 @@ A Supernote plugin that keeps your [Hardcover](https://hardcover.app) reading pr
 - **Progress is one touch behind.** A page turn is noticed at your next touch, and sent at most once every 10 seconds.
 - **Nothing arrives on Hardcover.** Check Wi-Fi, that Tracking is on and the status is Currently reading. Errors show under the progress bar on the book page.
 - **Book not found or title unreadable.** Fix the EPUB's metadata (title, author, ISBN), for example with Calibre, or add the book on hardcover.app.
+- **A PDF asks for the book.** PDFs are never matched automatically: the first time, search for the book and pick your edition. The choice is remembered for that file.
 - **"No read in progress".** Set another status, then Currently reading again.
 - **Signed out or asked for a new sign-in.** Open Plugins > Hardcover and sign in again.
 - **"This plugin version is too low."** The same or a newer version is already installed.
