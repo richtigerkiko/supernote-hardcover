@@ -82,7 +82,7 @@ export default function EditionPicker({editions, editionId, onPick, onClose}: Pr
   );
 }
 
-const styles = StyleSheet.create({
+export const styles = StyleSheet.create({
   head: {paddingTop: 12, paddingHorizontal: 32}, // clears the host's home button, like shared.body
   search: {fontSize: 21, color: BLACK, height: 56, paddingHorizontal: 24, borderWidth: 1.5, borderColor: BLACK, borderRadius: 28},
   pickNote: {fontSize: 18, lineHeight: 25, marginTop: 14, paddingBottom: 14, color: BLACK, ...shared.hair},

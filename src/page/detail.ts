@@ -21,6 +21,19 @@ export function withEdition(item: ReadingItem | null, ed?: {id: number; pages: n
 const tagNames = (tags: ApiBook['cachedTags'] | undefined, group: string): string[] =>
   (tags?.[group] ?? []).flatMap(t => (t.tag ? [t.tag] : []));
 
+export const toEditions = (book: ApiBook): PageEdition[] =>
+  book.editions.map(e => ({
+    id: String(e.id),
+    format: e.editionFormat ?? 'Edition',
+    publisher: e.publisher?.name ?? 'Unknown publisher',
+    year: e.releaseDate ? Number(e.releaseDate.slice(0, 4)) : null,
+    pages: e.pages ?? 0,
+    lang: e.language?.language ?? '',
+    isbn: e.isbn13 ?? undefined,
+    audio: !!e.audioSeconds && !e.pages,
+  }));
+export const authorsOf = (book: ApiBook): string[] => (book.contributions ?? []).flatMap(c => (c.author ? [c.author.name] : []));
+
 // Raw Hardcover record (fetchBookDetail) + the reading item + this file's saved edition + the reader position -> the
 // props of DetailPage. All ids are strings there.
 // isbns: the ISBN-13s in the file's own identifiers; an edition with one of them is the file's edition.
@@ -37,16 +50,7 @@ export function buildDetail({
   sample: Sample;
   isbns?: string[];
 }): PageBook {
-  const editions: PageEdition[] = book.editions.map(e => ({
-    id: String(e.id),
-    format: e.editionFormat ?? 'Edition',
-    publisher: e.publisher?.name ?? 'Unknown publisher',
-    year: e.releaseDate ? Number(e.releaseDate.slice(0, 4)) : null,
-    pages: e.pages ?? 0,
-    lang: e.language?.language ?? '',
-    isbn: e.isbn13 ?? undefined,
-    audio: !!e.audioSeconds && !e.pages,
-  }));
+  const editions = toEditions(book);
   const wanted = String(saved?.id ?? '');
   const byFile = editions.find(e => e.isbn && e.pages > 0 && isbns.includes(e.isbn));
   const theirs = String(item.editionId ?? '');
@@ -59,7 +63,7 @@ export function buildDetail({
   return {
     title: book.title ?? '',
     subtitle: book.subtitle,
-    authors: (book.contributions ?? []).flatMap(c => (c.author ? [c.author.name] : [])),
+    authors: authorsOf(book),
     cover: book.cachedImage?.url ?? null,
     rating: book.rating || null,
     ratingsCount: book.ratingsCount,

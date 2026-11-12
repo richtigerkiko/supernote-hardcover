@@ -4,8 +4,9 @@ import type {FileMeta} from '../core/store';
 import type {ReadingItem} from '../core/types';
 import {withTimeout} from '../core/util';
 import type * as client from '../hardcover/client';
-import {withEdition} from './detail';
+import {authorsOf, toEditions, withEdition} from './detail';
 import type {Meta} from './meta';
+import type {Ask} from './session';
 
 // The Hardcover calls the page modules make; plugin.ts passes the real client, tests a fake.
 export type Client = Pick<
@@ -29,6 +30,8 @@ export type Client = Pick<
   | 'updateJournal'
 >;
 export type Dialog = (tip: string, left: string, right: string, ok: boolean) => Promise<unknown>;
+
+type Link = {bookId: number; editionId?: number};
 
 const READING_TTL_MS = 600_000;
 
@@ -57,52 +60,62 @@ export function createLibrary({auth, hc, meta, dialog}: {auth: OAuthSession; hc:
   // the cached list can hide an entry that exists, and an existing entry must never be written to here.
   const entryFor = (bookId: number) => hc.fetchUserBookForBook(auth, bookId);
 
-  // Having the EPUB means owning the book: add the catalogue book `link` to the library (Want to Read) with its edition
-  // marked as owned, and return its library item. The edition (when it has pages) is saved for this file, so tracking
-  // has a page count without a manual edition change.
-  async function addToLibrary(path: string, m: FileMeta, link: {bookId: number; editionId?: number}) {
-    let item = await entryFor(link.bookId);
+  // Having the EPUB means owning the book: add the catalogue book to the library (Want to Read) with this edition marked as
+  // owned, and return its library item. The edition (when it has pages) becomes the file's edition, so tracking has a page
+  // count. The link stays: the next load finds the entry through it even when its title would not match the file.
+  async function addToLibrary(path: string, m: FileMeta, to: {bookId: number; editionId: number}) {
+    let item = await entryFor(to.bookId);
     if (!item) {
-      const ed = await withTimeout(hc.addOwned(auth, link.bookId, link.editionId), 20_000, 'add to library');
-      if (ed.pages && !m.edition) m.edition = {id: ed.id, pages: ed.pages};
-      item = await entryFor(link.bookId);
+      const ed = await withTimeout(hc.addOwned(auth, to.bookId, to.editionId), 20_000, 'add to library');
+      if (ed.pages) m.edition = {id: ed.id, pages: ed.pages};
+      item = await entryFor(to.bookId);
       drop(); // the cached list lacks the new entry
     }
-    delete m.linked;
+    m.linked = to;
     await meta.save(path, m);
     return withEdition(item, m.edition);
   }
 
-  // A book that is in no library list: find it in the whole catalogue (like KOReader's link) and remember the link per file
-  // as `linked` in the metadata cache. The first time, ask whether to add it; on No the page still works for the linked
-  // book, without tracking and status (they need a library entry, see CLAUDE.md). Only from a button press: a touch never
-  // opens a dialog. Returns the new library item, a stub for the linked book (userBookId 0 = no library entry), or null.
-  async function linkFromCatalogue(path: string): Promise<ReadingItem | null> {
+  // The catalogue book shown without a library entry (userBookId 0): no tracking and no status (see CLAUDE.md).
+  const stub = (to: Link): ReadingItem => ({userBookId: 0, bookId: to.bookId, statusId: 0, title: '', authors: [], editionId: to.editionId ?? null, editionPages: null, read: null});
+
+  // This file is the catalogue book `to` (found by catalogueBook, or picked in the book search). Not in the library yet:
+  // ask whether to add it. Yes with an ISBN edition adds it; Yes without one returns the edition picker for the page to
+  // show (nothing is written before the pick). On No the link is saved per file (`linked` in the metadata cache, like
+  // KOReader's link), so there is no second prompt and the page works for the book without tracking and status.
+  async function link(path: string, to: Link): Promise<ReadingItem | Ask> {
     const m = await meta.get(path);
-    if (m.failed) return null;
-    let link = m.linked;
-    if (!link) {
-      const found = await withTimeout(
-        catalogueBook({meta: m, editionsForIsbns: i => hc.editionsForIsbns(auth, i), searchBooks: t => hc.searchBooks(auth, t)}),
-        20_000,
-        'catalogue search',
-      );
-      if (!found) return null;
-      link = found;
-      const existing = await entryFor(link.bookId);
-      if (existing) return withEdition(existing, m.edition); // it was on the shelves after all: nothing to ask or write
-      const book = await withTimeout(hc.fetchBookDetail(auth, link.bookId), 20_000, 'book details');
-      const yes = await dialog(`"${book.title}" is not in your Hardcover library. Add it as Want to Read and mark your copy as owned?`, 'No', 'Yes', false);
-      if (yes) return addToLibrary(path, m, link);
-      m.linked = link;
-      await meta.save(path, m);
+    const item = await entryFor(to.bookId); // on the shelves after all: nothing to ask or write
+    if (!item) {
+      const book = await withTimeout(hc.fetchBookDetail(auth, to.bookId), 20_000, 'book details');
+      const editions = toEditions(book);
+      const by = authorsOf(book).slice(0, 2).join(', '); // the rest are mostly translators
+      // With no edition to own the book is only linked, and load() says that no edition has a page count.
+      const ownable = !!to.editionId || editions.some(e => !e.audio && e.pages > 0);
+      if (ownable && (await dialog(`"${book.title}"${by ? ` by ${by}` : ''} is not in your Hardcover library. Add it as Want to Read and mark your copy as owned?`, 'No', 'Yes', false))) {
+        if (!to.editionId) return {pick: {bookId: to.bookId, editions}};
+        return (await addToLibrary(path, m, {bookId: to.bookId, editionId: to.editionId})) ?? stub(to);
+      }
     }
-    return withEdition(
-      {userBookId: 0, bookId: link.bookId, statusId: 0, title: '', authors: [], editionId: link.editionId ?? null, editionPages: null, read: null},
-      m.edition,
-    );
+    m.linked = to;
+    await meta.save(path, m);
+    return withEdition(item ?? stub(to), m.edition)!;
   }
 
-  return {drop, list, cached: () => reading.list, resolvePath, addToLibrary, linkFromCatalogue};
+  // A book that the library match did not find: the saved link, else the whole catalogue (catalogueBook), else the book
+  // search on the page. Only from a button press: a touch never opens a dialog.
+  async function linkFromCatalogue(path: string): Promise<ReadingItem | Ask> {
+    const m = await meta.get(path);
+    // The entry is asked for each time: the linked book may have been added since (here or on hardcover.app).
+    if (m.linked) return withEdition((await entryFor(m.linked.bookId)) ?? stub(m.linked), m.edition)!;
+    const found = await withTimeout(
+      catalogueBook({meta: m, editionsForIsbns: i => hc.editionsForIsbns(auth, i), searchBooks: t => hc.searchBooks(auth, t)}),
+      20_000,
+      'catalogue search',
+    );
+    return found ? link(path, found) : {search: [m.title, m.creator].filter(Boolean).join(' ')};
+  }
+
+  return {drop, list, cached: () => reading.list, resolvePath, addToLibrary, link, linkFromCatalogue};
 }
 export type Library = ReturnType<typeof createLibrary>;
