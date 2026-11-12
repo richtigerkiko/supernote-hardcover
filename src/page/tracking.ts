@@ -35,7 +35,12 @@ export function createTracking(d: {
       // Tracking was switched on before the ids were saved: look the book up once and save them.
       await d.grants.needGranted();
       const item = await d.library.resolvePath(path);
-      if (item) await d.meta.save(path, {...m, book: {bookId: item.bookId, userBookId: item.userBookId, title: item.title}, edition: m.edition ?? (item.editionId && item.editionPages ? {id: item.editionId, pages: item.editionPages} : undefined)});
+      if (item) {
+        // Change the cached object itself: meta.get hands out the same one to every later save.
+        m.book = {bookId: item.bookId, userBookId: item.userBookId, title: item.title};
+        if (!m.edition && item.editionId && item.editionPages) m.edition = {id: item.editionId, pages: item.editionPages};
+        await d.meta.save(path, m);
+      }
       return item;
     },
     // One user_books row per push, for the current read (a finished one is not touched, see saveProgress).

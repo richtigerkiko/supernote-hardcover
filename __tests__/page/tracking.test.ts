@@ -39,3 +39,17 @@ test('a tracked book pushes through one row refresh, with the saved ids and no l
   expect(t.hc.saveProgress.mock.calls[0][1]).toMatchObject({userBookId: 9, read: {id: 4, edition_id: 5}});
   expect(t.hc.saveProgress.mock.calls[0][2]).toBe(82);
 });
+
+test('an entry from before the saved ids is looked up once and the ids go into the cached object', async () => {
+  const files: Record<string, FileMeta> = {[PATH]: {ids: [], tracking: true}};
+  const t = setup(files);
+  t.library.resolvePath.mockResolvedValue({userBookId: 9, bookId: 5, title: 'Dune', statusId: 2, authors: [], editionId: 5, editionPages: 200, read: null});
+  t.tr.onTouch();
+  await flush();
+  expect(files[PATH].book).toEqual({bookId: 5, userBookId: 9, title: 'Dune'});
+  expect(files[PATH].edition).toEqual({id: 5, pages: 200});
+  t.tr.tracker.forget(PATH);
+  t.tr.onTouch();
+  await flush();
+  expect(t.library.resolvePath).toHaveBeenCalledTimes(1); // not again after a forget
+});
