@@ -20,6 +20,7 @@ export default function BookSearch({query, onSearch, onPick, onClose}: Props) {
   const [hits, setHits] = useState<CatalogueBook[] | null>(null); // null: searching
   const [error, setError] = useState('');
   const [choice, setChoice] = useState(0);
+  const [searched, setSearched] = useState(false); // false: nothing was searched yet (a PDF opens with an empty box)
   const seq = useRef(0); // an answer to an older search is dropped
   const search = () => {
     const mine = ++seq.current;
@@ -27,6 +28,7 @@ export default function BookSearch({query, onSearch, onPick, onClose}: Props) {
     setChoice(0);
     setError('');
     setHits(q ? null : []);
+    setSearched(!!q);
     if (!q) return;
     onSearch(q).then(
       found => {
@@ -63,7 +65,7 @@ export default function BookSearch({query, onSearch, onPick, onClose}: Props) {
         <Text style={styles.pickNote}>Hardcover has no sure match for this file. Pick the book it is.</Text>
       </View>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.list}>
-        {hits === null ? <Text style={styles.none}>Searching…</Text> : hits.length === 0 ? <Text style={styles.none}>{error || 'No book found'}</Text> : null}
+        {hits === null ? <Text style={styles.none}>Searching…</Text> : hits.length === 0 ? <Text style={styles.none}>{error || (searched ? 'No book found' : 'Type the title and author, then tap Search.')}</Text> : null}
         {(hits ?? []).map(h => (
           <Item key={h.bookId} tall on={h.bookId === choice} onPress={() => setChoice(h.bookId)}>
             <Text style={[styles.l1, h.bookId === choice && shared.bold]} numberOfLines={2}>
