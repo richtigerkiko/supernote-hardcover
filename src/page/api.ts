@@ -1,7 +1,7 @@
 import type {OAuthSession} from '@hardcover/sdk/oauth';
 import {isbnsIn} from '../core/match';
 import {joinEntry, journalEntry, journalPosition, splitEntry} from '../core/journal';
-import type {BookDetail, Grants, ReadingItem, Sample} from '../core/types';
+import {NOT_READING, type BookDetail, type Grants, type ReadingItem, type Sample} from '../core/types';
 import {log, withTimeout} from '../core/util';
 import {hasScope, SCOPES} from '../hardcover/auth';
 import {buildDetail, STATUS_ID, withEdition} from './detail';
@@ -96,7 +96,9 @@ export function createApi({auth, hc, meta, library, tracking, grants, dialog, se
       detail.editionSaved = true;
       if (mine === loadSeq) current = {path: s.path, item, detail, sample: s, editionId: detail.editionId};
       if (!detail.inLibrary) return {book: detail, tracking: false, sync: 'Not in your library: tracking and status are off.'};
-      return {book: detail, tracking: m.tracking === true, sync: tracking.syncNote(s.path)};
+      // Tracking is on but nothing would be written: say why before the first page turn finds out.
+      const idle = m.tracking === true && (item.statusId !== 2 || !item.read) ? NOT_READING : '';
+      return {book: detail, tracking: m.tracking === true, sync: tracking.syncNote(s.path) || idle};
     },
     // Device grant (RFC 8628): onCode shows the page where to type the code. Resolves true once the account approved it,
     // false when the attempt was cancelled (see signInAbort).
@@ -203,7 +205,7 @@ export function createApi({auth, hc, meta, library, tracking, grants, dialog, se
       const c = needLibraryBook();
       if (await ensureScope('write:reviews', 'Writing reviews')) {
         const r = await hc.fetchReview(auth, c.item.userBookId);
-        return {markdown: r.markdown, hasSpoilers: r.hasSpoilers, sponsored: false, notes: r.notes, ...(r.rating ? {rating: r.rating} : {})};
+        return {markdown: r.markdown, hasSpoilers: r.hasSpoilers, sponsored: r.sponsored, notes: r.notes, ...(r.rating ? {rating: r.rating} : {})};
       }
       return false; // signed out to ask for the scope, reload shows Sign in
     },

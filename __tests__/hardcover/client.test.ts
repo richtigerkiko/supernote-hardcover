@@ -1,5 +1,5 @@
-import type {ReadingItem} from '../../src/core/types';
-import {fetchUserBookForBook, bookIdsForIsbns, fetchBookDetail, fetchUserBooks, localDate, progressInput, saveProgress, saveJournal, saveReview, fetchReview, setStatus} from '../../src/hardcover/client';
+import {NOT_READING, type ReadingItem} from '../../src/core/types';
+import {fetchUserBook, fetchUserBookForBook, bookIdsForIsbns, fetchBookDetail, fetchUserBooks, saveProgress, saveJournal, saveReview, fetchReview, setStatus} from '../../src/hardcover/client';
 
 // The SDK is the transport; these tests check what we send it and how we map what it returns.
 type Mocks = Record<string, jest.Mock>;
@@ -17,7 +17,7 @@ jest.mock('@hardcover/sdk', () => ({
   },
   JournalEvent: {Quote: 'quote', Note: 'note'},
   PrivacySetting: {Public: 1, Follows: 2, Private: 3},
-  operations: {UpdateUserBookRead: 'UPDATE', AddUserBookRead: 'ADD', UpdateUserBook: 'UPDATE_BOOK'},
+  operations: {UpdateUserBookRead: 'UPDATE', UpdateUserBook: 'UPDATE_BOOK'},
 }));
 
 const ITEM: ReadingItem = {
@@ -87,49 +87,34 @@ test('bookIdsForIsbns returns each book once, even when several editions match',
   expect(mockSdk.books.findByIsbn).toHaveBeenCalledWith(['9781668287323', '9781668287309']);
 });
 
-test('progressInput keeps the existing started_at and edition, and leaves null fields out', () => {
-  expect(progressInput(ITEM, 120)).toEqual({progress_pages: 120, edition_id: 32560293, started_at: '2026-11-01'});
-  const noDates: ReadingItem = {...ITEM, read: {...ITEM.read!, started_at: null}};
-  expect(progressInput(noDates, 120)).toEqual({progress_pages: 120, edition_id: 32560293});
-});
-
-test('saveProgress updates the newest read, sending its existing fields back', async () => {
+test('saveProgress sends only the page and the edition to the read in progress', async () => {
   mockSdk.request.mockResolvedValue({});
   await saveProgress('T', ITEM, 120);
-  expect(mockSdk.request).toHaveBeenCalledWith('UPDATE', {
-    id: 99,
-    read: {progress_pages: 120, edition_id: 32560293, started_at: '2026-11-01'},
-  });
+  expect(mockSdk.request).toHaveBeenCalledTimes(1);
+  expect(mockSdk.request).toHaveBeenCalledWith('UPDATE', {id: 99, read: {progress_pages: 120, edition_id: 32560293}});
 });
 
-test('saveProgress inserts a new read when there is none', async () => {
-  mockSdk.request.mockResolvedValue({insert_user_book_read: {userBookRead: {id: 55}}});
-  await saveProgress('T', {...ITEM, read: null}, 120);
-  const [op, vars] = mockSdk.request.mock.calls[0];
-  expect(op).toBe('ADD');
-  expect(vars.userBookId).toBe(7);
-  expect(vars.read).toMatchObject({progress_pages: 120, edition_id: 32560293, started_at: localDate(new Date())});
+test.each([
+  ['Want to Read', {statusId: 1}],
+  ['Read', {statusId: 3}],
+  ['no read', {read: null}],
+  ['a finished read', {read: {...ITEM.read!, finished_at: '2026-10-01'}}],
+])('saveProgress writes nothing and says why for %s', async (_name, over) => {
+  await expect(saveProgress('T', {...ITEM, ...over}, 120)).rejects.toThrow(NOT_READING);
+  expect(mockSdk.request).not.toHaveBeenCalled();
 });
 
-test('a second save on the same item updates the read the first one inserted', async () => {
-  mockSdk.request.mockResolvedValueOnce({insert_user_book_read: {userBookRead: {id: 55}}}).mockResolvedValueOnce({});
-  const item = {...ITEM, read: null};
-  await saveProgress('T', item, 120);
-  await saveProgress('T', item, 130);
-  expect(mockSdk.request.mock.calls[0][0]).toBe('ADD');
-  expect(mockSdk.request.mock.calls[1][0]).toBe('UPDATE');
-  expect(mockSdk.request.mock.calls[1][1].id).toBe(55);
+test('the last page is sent as one before it, so the server does not finish the book', async () => {
+  mockSdk.request.mockResolvedValue({});
+  await saveProgress('T', ITEM, 330);
+  expect(mockSdk.request.mock.calls[0][1].read.progress_pages).toBe(329);
+  await saveProgress('T', ITEM, 329);
+  expect(mockSdk.request.mock.calls[1][1].read.progress_pages).toBe(329);
 });
 
-test('an insert that returns no read id throws and caches nothing', async () => {
-  mockSdk.request.mockResolvedValue({insert_user_book_read: {userBookRead: null}});
-  const item = {...ITEM, read: null};
-  await expect(saveProgress('T', item, 120)).rejects.toThrow(/no read id/);
-  expect(item.read).toBeNull();
-});
-
-test('localDate is the local calendar day, in any time zone', () => {
-  expect(localDate(new Date(2026, 10, 10, 0, 30))).toBe('2026-11-10');
+test('an edition with one page is not pushed', async () => {
+  await saveProgress('T', {...ITEM, editionPages: 1}, 1);
+  expect(mockSdk.request).not.toHaveBeenCalled();
 });
 
 test('never writes without a real page count', async () => {
@@ -218,12 +203,12 @@ test("an OAuth session is passed to the SDK as auth, not as a token", async () =
 
 describe('saveReview', () => {
   const REVIEW = {markdown: ' great ', hasSpoilers: true, sponsored: false, notes: ' mine '};
-  test('one UpdateUserBook request with the review fields; sponsored only when set', async () => {
+  test('one UpdateUserBook request with the review fields; sponsored always sent, so it can be unmarked', async () => {
     mockSdk.request.mockResolvedValue({});
     await saveReview('T', 7, {...REVIEW, rating: 4.5});
     expect(mockSdk.request).toHaveBeenLastCalledWith('UPDATE_BOOK', {
       id: 7,
-      object: {rating: 4.5, review_markdown: 'great', review_has_spoilers: true, private_notes: 'mine'},
+      object: {rating: 4.5, review_markdown: 'great', review_has_spoilers: true, sponsored_review: false, private_notes: 'mine'},
     });
     await saveReview('T', 7, {...REVIEW, sponsored: true});
     expect(mockSdk.request.mock.calls.at(-1)![1].object).toEqual({review_markdown: 'great', review_has_spoilers: true, sponsored_review: true, private_notes: 'mine'});
@@ -236,9 +221,13 @@ describe('saveReview', () => {
     expect(mockSdk.request).not.toHaveBeenCalled();
   });
 
-  test('fetchReview maps the entry for prefilling', async () => {
+  test('fetchReview maps the entry for prefilling, with the stored sponsored flag', async () => {
     mockSdk.library.get = jest.fn().mockResolvedValue({reviewMarkdown: null, reviewHasSpoilers: true, privateNotes: 'n', rating: 3.5});
-    expect(await fetchReview('T', 7)).toEqual({markdown: '', hasSpoilers: true, notes: 'n', rating: 3.5});
+    mockSdk.graphql = jest.fn().mockResolvedValue({user_books: [{sponsored_review: true}]});
+    expect(await fetchReview('T', 7)).toEqual({markdown: '', hasSpoilers: true, sponsored: true, notes: 'n', rating: 3.5});
+    expect(mockSdk.graphql.mock.calls[0][1]).toEqual({id: 7});
+    mockSdk.graphql = jest.fn().mockResolvedValue({user_books: [{sponsored_review: false}]});
+    expect((await fetchReview('T', 7)).sponsored).toBe(false);
   });
 });
 
@@ -304,14 +293,21 @@ describe('journal read, edit, remove', () => {
   });
 });
 
-test('saveProgress leaves a finished read alone and inserts a new one', async () => {
-  mockSdk.request.mockResolvedValue({insert_user_book_read: {userBookRead: {id: 56}}});
-  const finished = {...ITEM, read: {...ITEM.read!, finished_at: '2026-10-01'}};
-  await saveProgress('T', finished, 40);
-  const [op, vars] = mockSdk.request.mock.calls[0];
-  expect(op).toBe('ADD');
-  expect(vars.read).not.toHaveProperty('finished_at');
-  expect(vars.read).toMatchObject({progress_pages: 40, started_at: localDate(new Date())});
+test('the read in progress is chosen over a newer finished one', async () => {
+  mockSdk.library.get = jest.fn(async () => ({
+    id: 7, bookId: 5, statusId: 2, editionId: 9, edition: {id: 9, pages: 300}, book: {title: 'T', cachedContributors: []},
+    userBookReads: [
+      {id: 12, startedAt: '2020-01-01', finishedAt: '2020-02-01', progressPages: 300, editionId: 9}, // a past read logged later
+      {id: 11, startedAt: '2026-11-01', finishedAt: null, progressPages: 40, editionId: 9},
+    ],
+  }));
+  const it = (await fetchUserBook('T', 7))!;
+  expect(it.read).toMatchObject({id: 11, finished_at: null});
+  mockSdk.request.mockResolvedValue({});
+  await saveProgress('T', it, 50);
+  expect(mockSdk.request).toHaveBeenCalledWith('UPDATE', {id: 11, read: {progress_pages: 50, edition_id: 9}});
+  mockSdk.library.get = jest.fn(async () => ({id: 7, bookId: 5, statusId: 3, userBookReads: [{id: 12, finishedAt: '2020-02-01'}]}));
+  expect((await fetchUserBook('T', 7))!.read).toBeNull();
 });
 
 test('fetchUserBookForBook finds the entry for one book and reads that row only', async () => {

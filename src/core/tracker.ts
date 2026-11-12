@@ -97,7 +97,11 @@ export function createTracker({resolve, push, now = Date.now}: TrackerDeps) {
       books.clear();
       state.lastError = null;
     },
-    forget: (path: string) => books.delete(path), // the next touch re-reads the book (its edition changed); no push on first sight
+    // The next touch re-reads the book (its edition, status or tracking changed): no push on first sight, and its error is gone.
+    forget(path: string) {
+      if (state.lastError?.path === path) state.lastError = null;
+      return books.delete(path);
+    },
     async tick(sample: Sample | null): Promise<void> {
       // No timers run in some lifecycle states, so a hung call (network, SDK) is detected by wall clock: after
       // BUSY_EXPIRY_MS a new tick goes ahead instead of waiting forever for the old one.

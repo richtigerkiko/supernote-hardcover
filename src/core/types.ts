@@ -7,7 +7,7 @@ export interface Sample {
   total: number;
 }
 
-// The newest read of a library entry, in the wire spelling the tracker and detail page already use.
+// The read in progress (not finished) of a library entry, in the wire spelling the tracker and detail page already use.
 export interface ReadRecord {
   id: number;
   started_at: string | null;
@@ -45,6 +45,9 @@ export interface PublicReview {
 }
 
 // The labels of the status list on the detail page (src/page/detail.ts maps them to Hardcover's status ids).
+// Why a tracked book is not pushed: progress only goes to a Currently Reading book with a read in progress.
+export const NOT_READING = 'Set the book to Currently reading to track it';
+
 export const STATUSES = ['Want to read', 'Currently reading', 'Paused', 'Did not finish', 'Finished'] as const;
 
 export type Edition = {

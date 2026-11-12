@@ -2,7 +2,7 @@ import {createApi} from '../../src/page/api';
 import {createLibrary} from '../../src/page/library';
 import {createMeta} from '../../src/page/meta';
 import {SCOPES} from '../../src/hardcover/auth';
-import type {ReadingItem} from '../../src/core/types';
+import {NOT_READING, type ReadingItem} from '../../src/core/types';
 
 const PATH = '/b.epub';
 const item = (over: Partial<ReadingItem> = {}): ReadingItem => ({
@@ -22,7 +22,7 @@ function setup({list = [item()], scope = SCOPES.join(' '), dialogYes = true, sam
     searchBooks: jest.fn(async () => [{bookId: 5, title: 'Dune', authors: ['Frank Herbert']}]),
     fetchBookDetail: jest.fn(async () => apiBook),
     addOwned: jest.fn(async () => ({id: 1, pages: 300})),
-    fetchReview: jest.fn(async () => ({markdown: 'm', hasSpoilers: true, notes: 'n', rating: 4})),
+    fetchReview: jest.fn(async () => ({markdown: 'm', hasSpoilers: true, sponsored: true, notes: 'n', rating: 4})),
     saveReview: jest.fn(async () => {}),
     fetchReviews: jest.fn(async () => ({reviews: [], hasMore: false})),
     setStatus: jest.fn(async () => {}),
@@ -187,6 +187,20 @@ describe('one edition per file', () => {
     expect(t.store.get(PATH).edition).toEqual({id: 2, pages: 350});
   });
 
+  test('tracking on for a book that is not Currently Reading (or has no read in progress) says why', async () => {
+    const read = {id: 4, started_at: 's', finished_at: null, progress_pages: 1, edition_id: 1};
+    const sync = async (over: Partial<ReadingItem>) => {
+      const t = setup({list: [item(over)]});
+      t.tracking.syncNote = () => '';
+      await t.api.load();
+      await t.api.setTracking(true);
+      return ((await t.api.load()) as any).sync;
+    };
+    expect(await sync({statusId: 1, read})).toBe(NOT_READING);
+    expect(await sync({statusId: 2, read: null})).toBe(NOT_READING);
+    expect(await sync({statusId: 2, read})).toBe('');
+  });
+
   test('switching tracking on saves the ids the tracker uses, and a failing save rejects', async () => {
     const t = setup();
     await t.api.load();
@@ -250,7 +264,7 @@ describe('review calls', () => {
   test('writeReview starts from what the entry holds', async () => {
     const t = setup();
     await t.api.load();
-    expect(await t.api.writeReview()).toEqual({markdown: 'm', hasSpoilers: true, sponsored: false, notes: 'n', rating: 4});
+    expect(await t.api.writeReview()).toEqual({markdown: 'm', hasSpoilers: true, sponsored: true, notes: 'n', rating: 4});
     expect(t.hc.fetchReview).toHaveBeenCalledWith(t.auth, 9);
   });
 
