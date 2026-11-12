@@ -26,6 +26,7 @@ export interface ApiDeps {
 export function createApi({auth, hc, meta, library, tracking, grants, dialog, session, sample}: ApiDeps): SessionApi {
   let current: {path: string; item: ReadingItem; detail: BookDetail; sample: Sample; editionId: string} | null = null; // the book the page was opened on
   let signInAbort: AbortController | null = null; // the sign-in that is waiting for its approval, if any
+  let askedScopes = false; // the missing-scopes dialog in load() was shown (not again until a restart, so a scope the server never grants cannot loop)
   let loadSeq = 0; // a slow load must not overwrite `current` after a newer one
 
   const needBook = () => {
@@ -38,6 +39,14 @@ export function createApi({auth, hc, meta, library, tracking, grants, dialog, se
     return c;
   };
 
+  // True when the stored sign-in has the scope; otherwise asks, signs out on yes and returns false (sign-ins stored before a scope was added lack it).
+  const ensureScope = async (scope: string, what: string): Promise<boolean> => {
+    if (hasScope((await auth.tokens())?.scope, scope)) return true;
+    if (!(await dialog(what + ' needs a new sign-in with more access. Sign in again now?', 'Cancel', 'Sign in', false))) throw new Error(what + ' need a new sign-in.');
+    await auth.signOut();
+    return false;
+  };
+
   return {
     // -> {book} for DetailPage, or {message} when there is nothing to show
     async load() {
@@ -45,6 +54,15 @@ export function createApi({auth, hc, meta, library, tracking, grants, dialog, se
       const mine = ++loadSeq;
       // Checked before the sample is taken: the pending sample (and, in App, the selection) stays for the reload after the sign-in.
       if (!(await auth.isSignedIn())) return {message: 'Sign in to Hardcover to sync your reading.', signIn: true};
+      // A version that asks for more scopes than the stored sign-in has: offer the new sign-in once per session (cancel keeps going).
+      const granted = (await auth.tokens())?.scope;
+      if (!askedScopes && SCOPES.some(sc => !hasScope(granted, sc))) {
+        askedScopes = true;
+        if (await dialog('This version needs a new sign-in with more access. Sign in again now?', 'Later', 'Sign in', false)) {
+          await auth.signOut();
+          return {message: 'Sign in to Hardcover to sync your reading.', signIn: true};
+        }
+      }
       const s = await (session.pending ?? sample());
       session.pending = null;
       if (!s) return {message: 'Open an EPUB in a document to see its Hardcover page.'};
@@ -130,6 +148,11 @@ export function createApi({auth, hc, meta, library, tracking, grants, dialog, se
       const ed = c?.detail.editions.find(e => e.id === c.editionId);
       const entry = journalEntry(event, passage, text);
       if (!c || !entry) throw new Error('Nothing to save.');
+      // Without read:journal the entry is posted but its read-back fails, and Retry would post a duplicate: sign in again first.
+      if (!(await ensureScope('read:journal', 'Journal entries'))) {
+        session.opened(); // reload shows Sign in
+        throw new Error('Journal entries need a new sign-in.');
+      }
       await grants.need();
       const position = ed ? journalPosition(c.sample.page, c.sample.total, ed.pages) : null;
       await hc.saveJournal(auth, {bookId: c.item.bookId, editionId: ed ? Number(ed.id) : null, event, entry, position: position ?? undefined, privacy});
@@ -145,13 +168,11 @@ export function createApi({auth, hc, meta, library, tracking, grants, dialog, se
     // Sign-ins stored before write:reviews was asked for cannot save a review: offer a new sign-in instead of failing at Save.
     async writeReview() {
       const c = needLibraryBook();
-      if (hasScope((await auth.tokens())?.scope, 'write:reviews')) {
+      if (await ensureScope('write:reviews', 'Writing reviews')) {
         const r = await hc.fetchReview(auth, c.item.userBookId);
         return {markdown: r.markdown, hasSpoilers: r.hasSpoilers, sponsored: false, notes: r.notes, ...(r.rating ? {rating: r.rating} : {})};
       }
-      if (!(await dialog('Writing reviews needs a new sign-in with more access. Sign in again now?', 'Cancel', 'Sign in', false))) throw new Error('Reviews need a new sign-in.');
-      await auth.signOut();
-      return false;
+      return false; // signed out to ask for the scope, reload shows Sign in
     },
     async saveReview(r) {
       const c = needLibraryBook();

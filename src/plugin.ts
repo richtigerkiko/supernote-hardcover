@@ -31,7 +31,7 @@ const DEBUG_GESTURES = false;
 const auth = new OAuthSession({clientId: CLIENT_ID, store: fileTokenStore(tokenFile), onSignedOut: () => tracking.stop()});
 const meta = createMeta({read: readEpubMeta, cache: metaCache});
 const library = createLibrary({auth, hc, meta, dialog});
-const tracking = createTracking({auth, hc, meta, library, grants, sample, enabled: !DEBUG_GESTURES});
+const tracking = createTracking({auth, hc, meta, library, grants, dialog, sample, enabled: !DEBUG_GESTURES});
 
 session.api = createApi({auth, hc, meta, library, tracking, grants, dialog, session, sample: safeSample});
 session.close = closeView;
