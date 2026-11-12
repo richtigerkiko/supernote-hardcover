@@ -5,8 +5,8 @@ import {PixelRatio, Pressable, StyleSheet, Text, useWindowDimensions, View} from
 
 export const BLACK = '#000000';
 export const WHITE = '#ffffff';
-// The only grey. Device fallback if it is invisible or dithers on the panel: #dddddd, #cccccc, else a 1 px outlined pill.
-export const GREY = '#ebebeb';
+// The only grey: 25% (#bfbfbf). The boards' #ebebeb was not visible at all on the Nomad's panel (owner, 2026-11-12).
+export const GREY = '#bfbfbf';
 // Android's "serif" family is Noto Serif on the Nomad (/system/etc/fonts.xml, checked 2026-11-12), so no font is bundled.
 export const SERIF = 'serif';
 
