@@ -190,10 +190,11 @@ describe('one edition per file', () => {
   test('tracking on for a book that is not Currently Reading (or has no read in progress) says why', async () => {
     const read = {id: 4, started_at: 's', finished_at: null, progress_pages: 1, edition_id: 1};
     const sync = async (over: Partial<ReadingItem>) => {
-      const t = setup({list: [item(over)]});
+      const t = setup({list: [item(over)], dialogYes: false}); // "Not now" to the offer
       t.tracking.syncNote = () => '';
       await t.api.load();
-      const toggled = await t.api.setTracking(true);
+      const toggled = (await t.api.setTracking(true)).sync;
+      expect(t.hc.setStatus).not.toHaveBeenCalled();
       expect(((await t.api.load()) as any).sync).toBe(toggled); // the toggle and a reload agree
       return toggled;
     };
@@ -202,17 +203,46 @@ describe('one edition per file', () => {
     expect(await sync({statusId: 2, read})).toBe('');
   });
 
-  test('the status picker sets and clears the hint, and a tracking problem always wins', async () => {
+  test('tracking on for a book that is not Currently Reading offers the status change', async () => {
     const t = setup({list: [item({statusId: 1})]});
+    t.tracking.syncNote = () => '';
+    await t.api.load();
+    expect(await t.api.setTracking(true)).toEqual({sync: '', status: 'Currently reading'});
+    expect(t.dialog).toHaveBeenLastCalledWith(expect.stringContaining('Set "Dune" to Currently reading?'), 'Not now', 'Set', false);
+    expect(t.hc.setStatus).toHaveBeenCalledWith(t.auth, 9, 2);
+    expect(t.store.get(PATH).tracking).toBe(true);
+    t.dialog.mockClear();
+    await t.api.setTracking(false); // off, and on again for a book that now is Currently Reading: no question
+    expect(await t.api.setTracking(true)).toEqual({sync: '', status: undefined});
+    expect(t.dialog).not.toHaveBeenCalled();
+    expect(t.hc.setStatus).toHaveBeenCalledTimes(1);
+  });
+
+  test('a status change that fails leaves tracking off, and there is no offer for a Currently Reading book without a read', async () => {
+    const t = setup({list: [item({statusId: 1})]});
+    await t.api.load();
+    t.hc.setStatus.mockRejectedValue(new Error('offline'));
+    await expect(t.api.setTracking(true)).rejects.toThrow('offline');
+    expect(t.store.get(PATH)?.tracking).not.toBe(true);
+    const noRead = setup({list: [item({statusId: 2, read: null})]});
+    noRead.tracking.syncNote = () => '';
+    await noRead.api.load();
+    noRead.dialog.mockClear();
+    expect((await noRead.api.setTracking(true)).sync).toBe(NO_READ);
+    expect(noRead.dialog).not.toHaveBeenCalled();
+  });
+
+  test('the status picker sets and clears the hint, and a tracking problem always wins', async () => {
+    const t = setup({list: [item({statusId: 1})], dialogYes: false});
     t.tracking.syncNote = () => '';
     await t.api.load();
     expect(await t.api.setStatus('Currently reading')).toBe(''); // tracking off: nothing to say
     await t.api.setTracking(true);
     expect(await t.api.setStatus('Want to read')).toBe(NOT_READING);
     expect(await t.api.setStatus('Currently reading')).toBe(''); // the server starts the read
-    expect(await t.api.setTracking(true)).toBe('');
+    expect((await t.api.setTracking(true)).sync).toBe('');
     t.tracking.syncNote = () => 'Signed out, tracking stopped';
-    expect(await t.api.setTracking(true)).toBe('Signed out, tracking stopped');
+    expect((await t.api.setTracking(true)).sync).toBe('Signed out, tracking stopped');
     expect(await t.api.setStatus('Want to read')).toBe('Signed out, tracking stopped');
   });
 

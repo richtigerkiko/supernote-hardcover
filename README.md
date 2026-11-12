@@ -35,7 +35,7 @@ A Supernote plugin that keeps your [Hardcover](https://hardcover.app) reading pr
 
 ## Usage
 
-- **Tracking** is per book and off by default. Once on, progress follows your page turns. The book must be **Currently reading** on Hardcover. Reaching the last page does not mark it finished: set the status yourself.
+- **Tracking** is per book and off by default. Once on, progress follows your page turns. The book must be **Currently reading** on Hardcover; switching Tracking on for a book with another status offers to set it. Reaching the last page does not mark it finished: set the status yourself.
 - **Edition:** tap **Change** to pick the edition you are reading. Page numbers follow it.
 - **Quotes and notes:** select text, then tap the Hardcover icon in the selection toolbar. Entries are private unless you choose otherwise, and can be edited or removed in the Journal tab.
 - **Status and review:** the two buttons at the bottom of the book page.

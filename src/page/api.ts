@@ -154,15 +154,28 @@ export function createApi({auth, hc, meta, library, tracking, grants, dialog, se
     },
     // Tracking is remembered per file like the edition. Turning it on starts from the page the book is at now (nothing is
     // sent for it); turning it off drops anything not yet sent.
+    // Progress is only written for a Currently Reading book, and a book the plugin added is Want to Read: switching
+    // tracking on offers the status change (a deliberate tap; a page turn still never changes a status). On No tracking
+    // goes on anyway and the sync line says why nothing is sent. Asked before anything is saved, so a failed change
+    // leaves tracking off.
     async setTracking(on) {
       const c = needBook();
+      let status: 'Currently reading' | undefined;
+      if (on && c.idle === NOT_READING && c.item.userBookId && (await dialog(`Progress is only sent for a book you are currently reading. Set "${c.item.title}" to Currently reading?`, 'Not now', 'Set', false))) {
+        await grants.need();
+        await hc.setStatus(auth, c.item.userBookId, STATUS_ID['Currently reading']);
+        library.drop();
+        c.idle = ''; // the server starts the read
+        status = 'Currently reading';
+        log('status set to Currently reading for', c.item.title);
+      }
       const m = await meta.get(c.path);
       m.tracking = on;
       if (on) m.book = {bookId: c.item.bookId, userBookId: c.item.userBookId, title: c.item.title}; // the tracker needs no library list
       await meta.save(c.path, m);
       tracking.tracker.forget(c.path);
       log(on ? 'tracking on for' : 'tracking off for', c.item.title);
-      return note(c.path, on, c.idle); // the page is not reloaded: this is its new sync line
+      return {sync: note(c.path, on, c.idle), status}; // the page is not reloaded: its new sync line, and the status if it changed
     },
     // The edition is remembered per file in the metadata cache and used for the pages we compute from now on.
     async setEdition(editionId) {

@@ -54,6 +54,7 @@ export function createTracking(d: {
         const read = fresh.read && {...fresh.read, edition_id: item.editionId}; // the file's edition, not the entry's
         await d.hc.saveProgress(d.auth, {...item, statusId: fresh.statusId, read}, pages);
       } catch (e) {
+        log('push failed', item.title, String((e as Error)?.message ?? e)); // logcat only: the page shows it in the sync line
         if (![NOT_READING, NO_READ].includes((e as Error).message)) d.grants.revoke(); // maybe the grant is gone: the next touch asks hasPermission again
         throw e;
       }
