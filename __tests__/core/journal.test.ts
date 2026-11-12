@@ -1,4 +1,4 @@
-import {journalEntry, journalPosition} from '../../src/core/journal';
+import {joinEntry, journalEntry, journalPosition, splitEntry} from '../../src/core/journal';
 
 describe('journalPosition', () => {
   test('middle: reader page 82 of 288 on a 288-page edition is p. 83', () => {
@@ -34,5 +34,20 @@ describe('journalEntry', () => {
   test('nothing to save gives an empty string', () => {
     expect(journalEntry('quote', '  \n ', 'thoughts')).toBe('');
     expect(journalEntry('note', 'passage', ' ')).toBe('');
+  });
+});
+
+describe('splitEntry / joinEntry', () => {
+  test('inverse of journalEntry', () => {
+    const e = journalEntry('quote', 'a line', 'my thoughts');
+    expect(splitEntry('quote', e)).toEqual({passage: 'a line', thoughts: 'my thoughts'});
+    expect(splitEntry('quote', 'just a line')).toEqual({passage: 'just a line', thoughts: ''});
+    expect(splitEntry('note', 'a note')).toEqual({passage: '', thoughts: 'a note'});
+  });
+
+  test('joinEntry keeps the passage as stored and drops blank thoughts', () => {
+    expect(joinEntry('p\nq', ' t ')).toBe('p\nq\n\n━━━\n\nt');
+    expect(joinEntry('p\nq', '  ')).toBe('p\nq');
+    expect(joinEntry('', ' note ')).toBe('note');
   });
 });

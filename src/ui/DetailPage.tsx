@@ -1,18 +1,21 @@
 import React, {useEffect, useState} from 'react';
-import {STATUSES, type BookDetail, type PublicReview} from '../core/types';
-import {Image, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
-import EditionPicker, {Item, TopBar} from './EditionPicker';
-import {BLACK, WHITE, shared} from './theme';
+import {STATUSES, type BookDetail, type JournalItem, type Privacy, type PublicReview} from '../core/types';
+import {splitEntry} from '../core/journal';
+import {Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import EditionPicker, {Item} from './EditionPicker';
+import {BLACK, Button, Chevron, Link, Options, Pill, SERIF, Tabs, TopBar, WHITE, shared} from './theme';
+import {PRIVACY, privacyName} from './JournalPage';
 
-// Book detail page, ported from the design artifact. Presentational only: no SDK imports, everything arrives as props,
-// so it can be designed on the emulator with mock data and unit tested. E-ink rules: black on white, no animation,
-// borders instead of greys, tap targets of at least 48 dp, text of at least 18 sp. The status list and the edition
-// list are full-screen views inside this component (the Nomad ignores a smaller window for a plugin view).
+// Book detail page, ported from the "Quiet page" boards of the design artifact. Presentational only: no SDK imports,
+// everything arrives as props, so it can be designed on the emulator with mock data and unit tested. E-ink rules
+// (theme.tsx): black on white, no animation, hairlines instead of boxes, tap targets of at least 48 dp, text of at least
+// 18 sp. The status list, the edition list, one review and the journal entry editor are full-screen views inside this
+// component (the Nomad, the only measured device, ignores a smaller window for a plugin view).
 
 type Props = {
   book: BookDetail;
   tracking: boolean;
-  syncNote?: string; // last sync or why tracking is not working, shown above the progress bar
+  syncNote?: string; // why tracking or a change is not working, shown under the progress line
   onToggleTracking: () => void;
   onClose: () => void;
   onWriteReview: () => void;
@@ -20,6 +23,9 @@ type Props = {
   onSetEdition: (editionId: string) => void;
   onAddToLibrary?: () => void; // only used when book.inLibrary is false
   onLoadReviews?: (offset: number) => Promise<{reviews: PublicReview[]; hasMore: boolean}>; // 10 at a time, first call on first open of the Reviews tab
+  onLoadJournal?: (offset: number) => Promise<{entries: JournalItem[]; hasMore: boolean}>; // 100 at a time, first call on first open of the Journal tab
+  onEditJournal?: (item: JournalItem, text: string, privacy: Privacy) => Promise<string>; // resolves with the whole new entry text
+  onRemoveJournal?: (id: number) => Promise<void>;
 };
 
 const stars = (rating: number) => {
@@ -30,10 +36,10 @@ const stars = (rating: number) => {
 // Half stars: 4.5 -> ★★★★½☆
 const halfStars = (rating: number) => '★'.repeat(Math.floor(rating)) + (rating % 1 >= 0.5 ? '½' : '') + '☆'.repeat(5 - Math.ceil(rating - 0.25));
 
-const join =(parts: (string | number | null | undefined)[]) => parts.filter(Boolean).join(' · ');
+const join = (parts: (string | number | null | undefined)[]) => parts.filter(Boolean).join(' · ');
 
-const CHIP_GAP = 6;
-const PILL_WIDTH = 52; // "+99" at 18 sp, border and padding included
+const CHIP_GAP = 8;
+const PILL_WIDTH = 60; // "+99" at 18 sp with the pill's padding
 
 // One labelled line of pills. All pills are measured once in a hidden layer; the line then shows as many as fit
 // and ends with a "+x" pill for the rest. Before the measurement (and in tests) every pill is shown.
@@ -58,23 +64,16 @@ function Row({label, items}: {label: string; items: string[]}) {
 
   return (
     <View style={styles.chipRow}>
-      <Text style={styles.chipLabel}>{label}</Text>
+      <Text style={[shared.label, styles.chipLabel]}>{label}</Text>
       <View style={styles.chips} onLayout={e => setWidth(e.nativeEvent.layout.width)}>
         {items.slice(0, shown).map(item => (
-          <View key={item} style={styles.chip}>
-            <Text style={styles.chipText}>{item}</Text>
-          </View>
+          <Pill key={item} text={item} />
         ))}
-        {hidden ? (
-          <View style={styles.chip}>
-            <Text style={styles.chipText}>{`+${hidden}`}</Text>
-          </View>
-        ) : null}
+        {hidden ? <Pill text={`+${hidden}`} /> : null}
         <View pointerEvents="none" style={styles.measure}>
           {items.map((item, i) => (
             <View
               key={item}
-              style={styles.chip}
               onLayout={e => {
                 const w = Math.ceil(e.nativeEvent.layout.width);
                 setSizes(prev => {
@@ -84,7 +83,7 @@ function Row({label, items}: {label: string; items: string[]}) {
                   return next;
                 });
               }}>
-              <Text style={styles.chipText}>{item}</Text>
+              <Pill text={item} />
             </View>
           ))}
         </View>
@@ -94,44 +93,45 @@ function Row({label, items}: {label: string; items: string[]}) {
 }
 
 function Progress({page, total}: {page: number; total: number}) {
-  const [inner, setInner] = useState(0);
   const percent = total ? Math.min(100, Math.round((page / total) * 100)) : 0;
-  const text = `Page ${page} of ${total} · ${percent}%`;
   return (
-    <View style={styles.bar} onLayout={e => setInner(e.nativeEvent.layout.width - 6)}>
-      <Text style={styles.barText}>{text}</Text>
-      <View style={[styles.fill, {width: `${percent}%`}]}>
-        <Text style={[styles.barText, styles.barTextOn, {width: inner}]} numberOfLines={1}>
-          {text}
+    <View accessibilityRole="progressbar" accessibilityLabel="Reading progress" accessibilityValue={{min: 0, max: 100, now: percent}}>
+      <View style={styles.progressLine}>
+        <Text style={shared.text}>
+          {'Page '}
+          <Text style={shared.bold}>{String(page)}</Text>
+          {` of ${total}`}
         </Text>
+        <Text style={[shared.text, shared.bold]}>{`${percent}%`}</Text>
+      </View>
+      <View style={styles.bar}>
+        <View style={[styles.fill, {width: `${percent}%`}]} />
       </View>
     </View>
   );
 }
 
-function Pill({text}: {text: string}) {
-  return (
-    <View style={styles.pill}>
-      <Text style={styles.pillText}>{text}</Text>
-    </View>
-  );
-}
-
-// Name, Supporter pill and stars on line one; date and spoiler pill on line two (shared by the list and the full view).
-function ReviewHead({r}: {r: PublicReview}) {
+// Name, stars and date on one line, then the badges: an italic line in the list, grey pills on the full view.
+function ReviewHead({r, full}: {r: PublicReview; full?: boolean}) {
+  const badges = [r.supporter ? 'Supporter' : '', r.spoiler ? 'Contains spoilers' : ''].filter(Boolean);
   return (
     <>
       <View style={styles.rvLine}>
-        <Text style={styles.rvName} numberOfLines={1}>
+        <Text style={[styles.rvName, full && {fontSize: 24}]} numberOfLines={1}>
           {r.user}
         </Text>
-        {r.supporter ? <Pill text="Supporter" /> : null}
-        {r.rating ? <Text style={styles.rvStars}>{halfStars(r.rating)}</Text> : null}
-      </View>
-      <View style={styles.rvLine}>
+        {r.rating ? <Text style={[styles.rvStars, full && {fontSize: 21}]}>{halfStars(r.rating)}</Text> : null}
         <Text style={styles.rvDate}>{r.date}</Text>
-        {r.spoiler ? <Pill text="Contains spoilers" /> : null}
       </View>
+      {!badges.length ? null : full ? (
+        <View style={styles.badges}>
+          {badges.map(b => (
+            <Pill key={b} text={b} />
+          ))}
+        </View>
+      ) : (
+        <Text style={styles.rvBadges}>{badges.join(' · ')}</Text>
+      )}
     </>
   );
 }
@@ -142,15 +142,11 @@ function ReviewEntry({r, onMore}: {r: PublicReview; onMore: () => void}) {
     <View style={styles.rv}>
       <ReviewHead r={r} />
       {r.spoiler ? null : (
-        <Text style={styles.rvText} numberOfLines={2} onTextLayout={e => setLong(e.nativeEvent.lines.length > 2)}>
+        <Text style={[shared.serif, styles.rvText]} numberOfLines={2} onTextLayout={e => setLong(e.nativeEvent.lines.length > 2)}>
           {r.text}
         </Text>
       )}
-      {r.spoiler || long ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={`More of ${r.user}'s review`} style={styles.more} onPress={onMore}>
-          <Text style={styles.moreText}>More</Text>
-        </Pressable>
-      ) : null}
+      {r.spoiler || long ? <Link label="More" accessibilityLabel={`More of ${r.user}'s review`} onPress={onMore} /> : null}
     </View>
   );
 }
@@ -158,19 +154,128 @@ function ReviewEntry({r, onMore}: {r: PublicReview; onMore: () => void}) {
 type Reviews = {items: PublicReview[]; hasMore: boolean; loaded: boolean; state: 'idle' | 'loading' | 'error'};
 const NO_REVIEWS: Reviews = {items: [], hasMore: false, loaded: false, state: 'idle'};
 
-export default function DetailPage({book, tracking, syncNote, onToggleTracking, onClose, onWriteReview, onSetStatus, onSetEdition, onAddToLibrary, onLoadReviews}: Props) {
+// One note or quote, each part clamped to 3 lines (Edit shows all of it), with Edit (opens the full-screen editor) and Remove (the "cannot be undone" confirmation is inline, so the list stays where it is).
+function JournalRow({item, onEdit, onRemove}: {item: JournalItem; onEdit: () => void; onRemove: () => Promise<void>}) {
+  const {passage, thoughts} = splitEntry(item.event, item.entry);
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const remove = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      await onRemove();
+    } catch (e: any) {
+      setError(e?.message || 'Could not remove.');
+      setBusy(false);
+    }
+  };
+  return (
+    <View style={[styles.rv, {paddingTop: 16}]}>
+      <View style={styles.jMeta}>
+        <Pill text={item.event === 'quote' ? 'Quote' : 'Note'} />
+        {item.page ? <Text style={styles.small}>{`p. ${item.page}`}</Text> : null}
+        <Text style={styles.small}>{item.date}</Text>
+        <Text style={[styles.small, styles.right]}>{privacyName(item.privacy)}</Text>
+      </View>
+      {passage ? <Text style={[shared.quote, {marginTop: 12}]} numberOfLines={3}>{passage}</Text> : null}
+      {thoughts ? <Text style={[shared.text, {marginTop: 10}]} numberOfLines={3}>{thoughts}</Text> : null}
+      {confirm ? (
+        <View style={styles.confirm}>
+          <Text style={[shared.text, shared.bold]}>Remove this entry from Hardcover? This cannot be undone.</Text>
+          {error ? <Text style={[shared.text, shared.bold]}>{error}</Text> : null}
+          <View style={styles.confirmButtons}>
+            <Button small solid disabled={busy} label={busy ? 'Removing…' : error ? 'Retry' : 'Yes, remove'} onPress={remove} />
+            <Button small disabled={busy} label="Keep" onPress={() => (setError(''), setConfirm(false))} />
+          </View>
+        </View>
+      ) : (
+        <View style={styles.links}>
+          <Link label="Edit" onPress={onEdit} />
+          <Link label="Remove" onPress={() => setConfirm(true)} />
+        </View>
+      )}
+    </View>
+  );
+}
+
+// Full-screen editor of one entry: the thoughts of a quote (its passage is never edited) or the text of a note, plus privacy.
+function JournalEdit({item, book, onSave, onClose}: {item: JournalItem; book: BookDetail; onSave: (text: string, privacy: Privacy) => Promise<void>; onClose: () => void}) {
+  const {passage, thoughts} = splitEntry(item.event, item.entry);
+  const quote = item.event === 'quote';
+  const [text, setText] = useState(thoughts);
+  const [privacy, setPrivacy] = useState<Privacy>(item.privacy);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const save = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      await onSave(text.trim(), privacy);
+    } catch (e: any) {
+      setError(e?.message || 'Could not save.');
+      setBusy(false);
+    }
+  };
+  return (
+    <View style={shared.overlay}>
+      <TopBar title={quote ? 'Edit quote' : 'Edit note'} onPress={onClose} />
+      <ScrollView style={styles.flex} keyboardShouldPersistTaps="handled" contentContainerStyle={[shared.body, styles.editBody]}>
+        {passage ? (
+          // as wide as the quote (or the source line, if that is longer), so the source sits right-justified under the quote itself
+          <View style={styles.quoteBlock}>
+            <Text style={[shared.quote, styles.bigQuote]}>{passage}</Text>
+            <Text style={styles.source}>{`— ${join([book.title, book.authors.join(', '), item.page ? `p. ${item.page}` : ''])}`}</Text>
+          </View>
+        ) : null}
+        <View>
+          <Text style={shared.label}>{quote ? 'Your thoughts' : 'Note'}</Text>
+          <TextInput
+            style={[shared.input, styles.editInput]}
+            multiline
+            textAlignVertical="top"
+            editable={!busy}
+            accessibilityLabel={quote ? 'Your thoughts' : 'Note text'}
+            placeholder={quote ? 'Add your thoughts (optional)…' : 'Write a note…'}
+            placeholderTextColor={BLACK}
+            value={text}
+            onChangeText={setText}
+          />
+        </View>
+        <View>
+          <Text style={shared.label}>Privacy</Text>
+          <Options options={PRIVACY} value={privacy} onPick={setPrivacy} disabled={busy} />
+        </View>
+        {error ? <Text style={[shared.text, shared.bold]}>{error}</Text> : null}
+      </ScrollView>
+      <View style={shared.actions}>
+        <Button label="Cancel" disabled={busy} onPress={onClose} />
+        <Button solid label={busy ? 'Saving…' : error ? 'Retry' : 'Save'} disabled={busy || (!quote && !text.trim())} onPress={save} />
+      </View>
+    </View>
+  );
+}
+
+type Journal = {items: JournalItem[]; hasMore: boolean; loaded: boolean; state: 'idle' | 'loading' | 'error'};
+const NO_JOURNAL: Journal = {items: [], hasMore: false, loaded: false, state: 'idle'};
+
+export default function DetailPage({book, tracking, syncNote, onToggleTracking, onClose, onWriteReview, onSetStatus, onSetEdition, onAddToLibrary, onLoadReviews, onLoadJournal, onEditJournal, onRemoveJournal}: Props) {
   const inLibrary = book.inLibrary !== false;
   const [view, setView] = useState<'detail' | 'status' | 'editions' | 'cover'>('detail');
   const [aboutOpen, setAboutOpen] = useState(false);
   const [aboutLong, setAboutLong] = useState(false);
-  const [tab, setTab] = useState<'about' | 'reviews'>('about');
+  const [tab, setTab] = useState<'about' | 'reviews' | 'journal'>('about');
   const [rv, setRv] = useState<Reviews>(NO_REVIEWS);
   const [openReview, setOpenReview] = useState<PublicReview | null>(null);
+  const [jn, setJn] = useState<Journal>(NO_JOURNAL);
+  const [editing, setEditing] = useState<JournalItem | null>(null);
 
   useEffect(() => {
     setTab('about'); // another book was loaded
     setRv(NO_REVIEWS);
+    setJn(NO_JOURNAL);
     setOpenReview(null);
+    setEditing(null);
   }, [book.title]);
 
   const loadReviews = () => {
@@ -186,13 +291,25 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
     if (!rv.loaded && rv.state === 'idle') loadReviews();
   };
 
+  const loadJournal = () => {
+    if (!onLoadJournal || jn.state === 'loading') return;
+    setJn(j => ({...j, state: 'loading'}));
+    onLoadJournal(jn.items.length).then( // removals delete on the server too, so the next page starts at what is left
+      p => setJn(j => ({items: [...j.items, ...p.entries], hasMore: p.hasMore, loaded: true, state: 'idle'})),
+      () => setJn(j => ({...j, state: 'error'})),
+    );
+  };
+  const showJournal = () => {
+    setTab('journal');
+    if (!jn.loaded && jn.state === 'idle') loadJournal();
+  };
   const ed = book.editions.find(e => e.id === book.editionId) ?? book.editions[0];
 
   if (view === 'status') {
     return (
-      <View style={styles.page}>
-        <TopBar title="Reading status" onBack={() => setView('detail')} />
-        <ScrollView>
+      <View style={shared.page}>
+        <TopBar title="Reading status" onPress={() => setView('detail')} />
+        <ScrollView contentContainerStyle={styles.statusList}>
           {STATUSES.map(s => (
             <Item
               key={s}
@@ -201,7 +318,7 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
                 onSetStatus(s);
                 setView('detail');
               }}>
-              <Text style={styles.l1}>{s}</Text>
+              <Text style={[styles.statusText, s === book.status && shared.bold]}>{s}</Text>
             </Item>
           ))}
         </ScrollView>
@@ -214,34 +331,22 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
   }
 
   const page = book.status === 'Finished' ? ed.pages : Math.min(ed.pages, Math.max(1, Math.round(book.progress * ed.pages)));
+  const edMeta = join([ed.isbn, ed.lang, ed.year]);
   return (
-    <View style={styles.page}>
-      <View style={styles.topBar}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close" style={styles.close} onPress={onClose}>
-          <Text style={styles.closeText}>✕</Text>
-        </Pressable>
+    <View style={shared.page}>
+      <TopBar icon="close" onPress={onClose}>
         <Image accessibilityLabel="Hardcover" source={require('../../assets/logo.png')} style={styles.logo} />
         {inLibrary ? (
-          <View style={styles.trackingBox}>
-            <Text style={styles.trackingLabel}>Tracking is</Text>
-            <Pressable
-              accessibilityRole="switch"
-              accessibilityState={{checked: tracking}}
-              accessibilityLabel="Hardcover tracking"
-              style={[styles.toggle, tracking && styles.toggleOn]}
-              onPress={onToggleTracking}>
-              <Text style={[styles.toggleText, tracking && styles.toggleTextOn]}>{tracking ? 'ON' : 'OFF'}</Text>
-            </Pressable>
-          </View>
+          <Pressable accessibilityRole="switch" accessibilityState={{checked: tracking}} accessibilityLabel="Hardcover tracking" style={styles.tracking} onPress={onToggleTracking}>
+            <Text style={shared.text}>{tracking ? 'Tracking on' : 'Tracking off'}</Text>
+            <View style={[styles.track, tracking && styles.trackOn]}>
+              <View style={[styles.knob, tracking && styles.knobOn]} />
+            </View>
+          </Pressable>
         ) : null}
-      </View>
+      </TopBar>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        {syncNote ? <Text style={styles.syncNote}>{syncNote}</Text> : null}
-        <View style={styles.progress}>
-          <Progress page={page} total={ed.pages} />
-        </View>
-
+      <ScrollView style={styles.flex} contentContainerStyle={styles.content}>
         <View style={styles.header}>
           {book.cover ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Show cover full size" onPress={() => setView('cover')}>
@@ -258,43 +363,42 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
             <Text style={styles.author}>{book.authors.join(', ')}</Text>
             {book.rating ? (
               <Text style={styles.meta}>
-                {stars(book.rating)} {book.rating.toFixed(1)}
-                {book.ratingsCount ? `  (${book.ratingsCount} ratings)` : ''}
+                {stars(book.rating)}
+                {'  '}
+                {join([book.rating.toFixed(1), book.ratingsCount ? `${book.ratingsCount} ratings` : ''])}
               </Text>
             ) : null}
-            <View style={styles.tagBox}>
-              <Row label="Genre" items={book.genres} />
-              <Row label="Mood" items={book.moods} />
-              <Row label="Tags" items={book.tags} />
-            </View>
-            <View style={styles.chipRow}>
-              <Text style={styles.chipLabel}>Edition</Text>
-              <View style={styles.edBox}>
-                <View style={styles.edText}>
-                  <Text style={styles.edName} numberOfLines={1} ellipsizeMode="tail">
-                    {join([ed.format, ed.publisher])}
-                  </Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Change edition" style={styles.edRow} onPress={() => setView('editions')}>
+              <View style={styles.flex}>
+                <Text style={styles.edName} numberOfLines={1} ellipsizeMode="tail">
+                  {join([ed.format, ed.publisher])}
+                </Text>
+                {edMeta ? (
                   <Text style={styles.edMeta} numberOfLines={1} ellipsizeMode="tail">
-                    {join([ed.isbn, ed.lang, ed.year])}
+                    {edMeta}
                   </Text>
-                </View>
-                <Pressable accessibilityRole="button" accessibilityLabel="Change edition" style={styles.edPencil} onPress={() => setView('editions')}>
-                  <View style={styles.pencil}>
-                    <View style={styles.pencilTip} />
-                  </View>
-                </Pressable>
+                ) : null}
               </View>
+              <Text style={styles.change}>Change</Text>
+              <Chevron dir="right" />
+            </Pressable>
+            <View style={styles.progress}>
+              <Progress page={page} total={ed.pages} />
+              {syncNote ? <Text style={styles.problem}>{syncNote}</Text> : null}
             </View>
           </View>
         </View>
 
         <View style={styles.tabs}>
-          <Pressable accessibilityRole="tab" accessibilityLabel="About tab" accessibilityState={{selected: tab === 'about'}} style={[styles.tab, tab === 'about' && styles.tabOn]} onPress={() => setTab('about')}>
-            <Text style={[styles.tabText, tab === 'about' && styles.tabTextOn]}>About</Text>
-          </Pressable>
-          <Pressable accessibilityRole="tab" accessibilityLabel="Reviews tab" accessibilityState={{selected: tab === 'reviews'}} style={[styles.tab, tab === 'reviews' && styles.tabOn]} onPress={showReviews}>
-            <Text style={[styles.tabText, tab === 'reviews' && styles.tabTextOn]}>Reviews</Text>
-          </Pressable>
+          <Tabs
+            options={[
+              ['about', 'Book info'],
+              ['reviews', 'Reviews'],
+              ['journal', 'Journal'],
+            ]}
+            value={tab}
+            onPick={t => (t === 'reviews' ? showReviews() : t === 'journal' ? showJournal() : setTab('about'))}
+          />
         </View>
 
         {tab === 'reviews' ? (
@@ -306,75 +410,102 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
             {rv.state === 'error' ? (
               <>
                 <Text style={styles.status}>Could not load reviews.</Text>
-                <Pressable accessibilityRole="button" style={styles.more} onPress={loadReviews}>
-                  <Text style={styles.moreText}>Retry</Text>
-                </Pressable>
+                <Link label="Retry" onPress={loadReviews} />
               </>
             ) : null}
             {rv.loaded && !rv.items.length && rv.state === 'idle' ? <Text style={styles.status}>No reviews yet.</Text> : null}
-            {rv.hasMore && rv.state === 'idle' ? (
-              <Pressable accessibilityRole="button" style={styles.more} onPress={loadReviews}>
-                <Text style={styles.moreText}>Load more</Text>
-              </Pressable>
-            ) : null}
+            {rv.hasMore && rv.state === 'idle' ? <Link label="Load more" onPress={loadReviews} /> : null}
           </View>
-        ) : book.description ? (
+        ) : tab === 'journal' ? (
           <View>
-            <Text
-              style={styles.description}
-              numberOfLines={aboutOpen ? undefined : 5}
-              onTextLayout={e => setAboutLong(e.nativeEvent.lines.length > 5)}>
-              {book.description.trim()}
-            </Text>
-            {aboutLong || aboutOpen ? (
-              <Pressable accessibilityRole="button" style={styles.more} onPress={() => setAboutOpen(o => !o)}>
-                <Text style={styles.moreText}>{aboutOpen ? 'Show less' : 'Show more'}</Text>
-              </Pressable>
+            {jn.items.map(j => (
+              <JournalRow
+                key={j.id}
+                item={j}
+                onEdit={() => setEditing(j)}
+                onRemove={async () => {
+                  await onRemoveJournal!(j.id);
+                  setJn(x => ({...x, items: x.items.filter(i => i.id !== j.id)}));
+                }}
+              />
+            ))}
+            {jn.state === 'loading' ? <Text style={styles.status}>{jn.items.length ? 'Loading more…' : 'Loading journal…'}</Text> : null}
+            {jn.state === 'error' ? (
+              <>
+                <Text style={styles.status}>Could not load the journal.</Text>
+                <Link label="Retry" onPress={loadJournal} />
+              </>
+            ) : null}
+            {jn.loaded && !jn.items.length && jn.state === 'idle' ? <Text style={styles.status}>No journal entries yet. Select text in the book to save a quote or note.</Text> : null}
+            {jn.hasMore && jn.state === 'idle' ? <Link label="Load more" onPress={loadJournal} /> : null}
+          </View>
+        ) : (
+          <View>
+            <View style={styles.tagBox}>
+              <Row label="Genre" items={book.genres} />
+              <Row label="Mood" items={book.moods} />
+              <Row label="Tags" items={book.tags} />
+            </View>
+            {book.description ? (
+              <>
+                <Text style={[shared.label, styles.aboutLabel]}>About</Text>
+                <Text style={[shared.serif, styles.description]} numberOfLines={aboutOpen ? undefined : 5} onTextLayout={e => setAboutLong(e.nativeEvent.lines.length > 5)}>
+                  {book.description.trim()}
+                </Text>
+                {aboutLong || aboutOpen ? <Link label={aboutOpen ? 'Show less' : 'Show more'} onPress={() => setAboutOpen(o => !o)} /> : null}
+              </>
             ) : null}
           </View>
-        ) : null}
+        )}
       </ScrollView>
 
-      <View style={styles.actions}>
+      <View style={shared.actions}>
         {inLibrary ? (
-          <Pressable accessibilityRole="button" accessibilityLabel="Change reading status" style={styles.action} onPress={() => setView('status')}>
-            <Text style={styles.actionText}>{`${book.status} ▾`}</Text>
-          </Pressable>
+          <Button label={book.status} accessibilityLabel="Change reading status" onPress={() => setView('status')}>
+            <Chevron dir="down" />
+          </Button>
         ) : (
-          <Pressable accessibilityRole="button" accessibilityLabel="Add to library" style={styles.action} onPress={onAddToLibrary}>
-            <Text style={styles.actionText}>Add to library</Text>
-          </Pressable>
+          <Button label="Add to library" onPress={onAddToLibrary} />
         )}
-        <Pressable accessibilityRole="button" style={styles.action} onPress={onWriteReview}>
-          <Text style={styles.actionText}>Write review</Text>
-        </Pressable>
+        <Button label="Write review" solid onPress={onWriteReview} />
       </View>
 
       {openReview ? (
         // overlay like the cover: the list underneath stays mounted, so Back to reviews lands on the same position
-        <View style={styles.coverFull}>
-          <TopBar title="Review" onBack={() => setOpenReview(null)} />
-          <ScrollView contentContainerStyle={styles.content}>
-            <Text style={styles.rvBook}>{join([book.title, book.authors.join(', ')])}</Text>
-            <ReviewHead r={openReview} />
-            <Text style={[styles.description, styles.rvFull]}>{openReview.text}</Text>
+        <View style={shared.overlay}>
+          <TopBar title="Review" onPress={() => setOpenReview(null)} />
+          <ScrollView style={styles.flex} contentContainerStyle={shared.body}>
+            <Text style={[styles.small, {marginBottom: 18}]}>{join([book.title, book.authors.join(', ')])}</Text>
+            <ReviewHead r={openReview} full />
+            <View style={styles.rvFull}>
+              <Text style={shared.serif}>{openReview.text}</Text>
+            </View>
           </ScrollView>
-          <View style={styles.actions}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Back to reviews" style={styles.action} onPress={() => setOpenReview(null)}>
-              <Text style={styles.actionText}>Back to reviews</Text>
-            </Pressable>
+          <View style={shared.actions}>
+            <Button label="Back to reviews" onPress={() => setOpenReview(null)} />
           </View>
         </View>
       ) : null}
 
+      {editing ? (
+        // overlay too: the journal list keeps its scroll position while one entry is edited
+        <JournalEdit
+          key={editing.id}
+          item={editing}
+          book={book}
+          onClose={() => setEditing(null)}
+          onSave={async (text, privacy) => {
+            const entry = await onEditJournal!(editing, text, privacy);
+            setJn(x => ({...x, items: x.items.map(i => (i.id === editing.id ? {...i, entry, privacy} : i))}));
+            setEditing(null);
+          }}
+        />
+      ) : null}
+
       {view === 'cover' && book.cover ? (
         // overlay, not a sub-view: the page underneath stays mounted, so its scroll position survives
-        <Pressable accessibilityLabel="Cover full size" style={styles.coverFull} onPress={() => setView('detail')}>
-          <View style={styles.topBar}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Close cover" style={styles.close} onPress={() => setView('detail')}>
-              <Text style={styles.closeText}>✕</Text>
-            </Pressable>
-          </View>
+        <Pressable accessibilityLabel="Cover full size" style={shared.overlay} onPress={() => setView('detail')}>
+          <TopBar icon="close" label="Close cover" onPress={() => setView('detail')} />
           <Image source={{uri: book.cover}} style={styles.coverFullImg} resizeMode="contain" />
         </Pressable>
       ) : null}
@@ -383,75 +514,62 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
 }
 
 const styles = StyleSheet.create({
-  page: {flex: 1, backgroundColor: WHITE},
-  topBar: shared.topBar,
-  close: shared.close,
-  logo: {width: 120, height: 26, resizeMode: 'contain', marginLeft: 4, marginRight: 'auto', marginTop: 6},
-  closeText: shared.closeText,
-  trackingBox: {flexDirection: 'row', alignItems: 'center'},
-  trackingLabel: {fontSize: 20, color: BLACK, marginRight: 12},
-  toggle: {width: 92, height: 48, borderWidth: 3, borderColor: BLACK, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: WHITE},
-  toggleOn: {backgroundColor: BLACK},
-  toggleText: {fontSize: 20, fontWeight: '700', color: BLACK},
-  toggleTextOn: {color: WHITE},
-  content: {padding: 24, paddingBottom: 16},
-  syncNote: {fontSize: 18, color: BLACK, marginBottom: 8},
-  progress: {marginBottom: 20},
-  bar: {height: 40, borderWidth: 3, borderColor: BLACK, justifyContent: 'center'},
-  barText: {fontSize: 20, fontWeight: '500', color: BLACK, paddingLeft: 12},
-  barTextOn: {position: 'absolute', left: 0, color: WHITE},
-  fill: {position: 'absolute', top: 0, bottom: 0, left: 0, overflow: 'hidden', backgroundColor: BLACK, justifyContent: 'center'},
-  header: {flexDirection: 'row'},
-  cover: {width: 190, height: 285, marginRight: 22, borderWidth: 2, borderColor: BLACK},
-  coverFull: {...StyleSheet.absoluteFillObject, backgroundColor: WHITE},
+  flex: {flex: 1},
+  logo: {width: 120, height: 26, resizeMode: 'contain', marginRight: 'auto', marginTop: 6},
+  tracking: {height: 56, flexDirection: 'row', alignItems: 'center', gap: 12},
+  track: {width: 68, height: 36, paddingHorizontal: 4, borderWidth: 2, borderColor: BLACK, borderRadius: 18, flexDirection: 'row', alignItems: 'center', backgroundColor: WHITE},
+  trackOn: {backgroundColor: BLACK, justifyContent: 'flex-end'},
+  knob: {width: 24, height: 24, borderRadius: 12, backgroundColor: BLACK},
+  knobOn: {backgroundColor: WHITE},
+  content: {paddingVertical: 12, paddingHorizontal: 32},
+  header: {flexDirection: 'row', gap: 28},
+  cover: {width: 200, height: 300, borderWidth: 1, borderColor: BLACK, borderRadius: 6},
   coverFullImg: {flex: 1, margin: 16},
   noCover: {alignItems: 'center', justifyContent: 'center', padding: 12},
-  noCoverText: {fontSize: 22, textAlign: 'center', color: BLACK},
-  info: {flex: 1},
-  title: {fontSize: 30, fontWeight: '700', lineHeight: 34, color: BLACK},
-  subtitle: {fontSize: 20, color: BLACK},
-  author: {fontSize: 22, color: BLACK, marginTop: 6},
-  meta: {fontSize: 19, color: BLACK, marginTop: 4},
-  tagBox: {marginTop: 4},
-  chipRow: {flexDirection: 'row', alignItems: 'center', marginTop: 6},
-  chipLabel: {width: 84, fontSize: 18, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', color: BLACK},
-  chips: {flex: 1, flexDirection: 'row', overflow: 'hidden'},
-  chip: {borderWidth: 1.5, borderColor: BLACK, borderRadius: 14, paddingHorizontal: 9, marginRight: CHIP_GAP, height: 26, justifyContent: 'center'},
-  chipText: {fontSize: 18, color: BLACK, includeFontPadding: false},
+  noCoverText: {fontFamily: SERIF, fontSize: 22, textAlign: 'center', color: BLACK},
+  info: {flex: 1, minHeight: 300},
+  title: {fontFamily: SERIF, fontSize: 36, lineHeight: 42, fontWeight: '700', color: BLACK},
+  subtitle: {fontFamily: SERIF, fontSize: 21, fontStyle: 'italic', color: BLACK, marginTop: 4},
+  author: {fontSize: 23, color: BLACK, marginTop: 14},
+  meta: {fontSize: 19, color: BLACK, marginTop: 6},
+  edRow: {flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 60, marginTop: 16, paddingRight: 4, borderTopWidth: 1, ...shared.hair},
+  edName: {fontSize: 19, lineHeight: 24, fontWeight: '500', color: BLACK},
+  edMeta: {fontSize: 18, lineHeight: 24, color: BLACK},
+  change: {fontSize: 19, color: BLACK, marginLeft: 4},
+  progress: {marginTop: 'auto', paddingTop: 16},
+  progressLine: {flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between'},
+  bar: {height: 10, marginTop: 8, borderWidth: 1.5, borderColor: BLACK, borderRadius: 5, overflow: 'hidden'},
+  fill: {height: '100%', backgroundColor: BLACK},
+  problem: {fontSize: 18, color: BLACK, marginTop: 8},
+  tabs: {marginTop: 20},
+  tagBox: {marginTop: 18, gap: 8},
+  chipRow: {flexDirection: 'row', alignItems: 'center'},
+  chipLabel: {width: 104},
+  chips: {flex: 1, flexDirection: 'row', gap: CHIP_GAP, overflow: 'hidden'},
   measure: {position: 'absolute', left: 0, top: 0, opacity: 0, flexDirection: 'row'},
-  edBox: {flex: 1, flexDirection: 'row', minHeight: 48, borderWidth: 1.5, borderColor: BLACK, borderRadius: 14, paddingLeft: 10},
-  edText: {flex: 1, justifyContent: 'center', paddingVertical: 4},
-  edName: {fontSize: 18, fontWeight: '700', color: BLACK, includeFontPadding: false},
-  edMeta: {fontSize: 18, color: BLACK, includeFontPadding: false},
-  edPencil: {width: 48, alignSelf: 'stretch', alignItems: 'center', paddingTop: 8}, // full box height, no border
-  pencil: {width: 8, height: 22, borderWidth: 2, borderColor: BLACK, transform: [{rotate: '45deg'}], marginTop: 2}, // drawn with Views: a text glyph may be missing from the Nomad's font
-  pencilTip: {position: 'absolute', bottom: -8, left: -2, width: 0, height: 0, borderLeftWidth: 4, borderRightWidth: 4, borderTopWidth: 7, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: BLACK},
-  l0: {fontSize: 17, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', color: BLACK},
-  l1: {fontSize: 21, fontWeight: '700', color: BLACK},
-  l2: {fontSize: 19, color: BLACK},
-  bold: {fontWeight: '700'},
-  go: {fontSize: 20, fontWeight: '700', color: BLACK, marginLeft: 14},
-  label: {fontSize: 18, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', color: BLACK, marginTop: 14, marginBottom: 6},
-  description: {fontSize: 21, lineHeight: 30, color: BLACK},
-  more: {height: 56, alignSelf: 'flex-start', marginTop: 8, paddingHorizontal: 24, borderWidth: 2, borderColor: BLACK, justifyContent: 'center'},
-  moreText: {fontSize: 20, fontWeight: '700', color: BLACK},
-  tabs: {flexDirection: 'row', marginTop: 20, marginBottom: 8},
-  tab: {flex: 1, height: 56, borderWidth: 2, borderColor: BLACK, alignItems: 'center', justifyContent: 'center'},
-  tabOn: {backgroundColor: BLACK},
-  tabText: {fontSize: 22, fontWeight: '700', color: BLACK},
-  tabTextOn: {color: WHITE},
-  status: {fontSize: 21, color: BLACK, marginTop: 14},
-  rv: {paddingVertical: 12, borderBottomWidth: 1.5, borderColor: BLACK},
-  rvLine: {flexDirection: 'row', alignItems: 'center', marginTop: 2},
-  rvName: {fontSize: 21, fontWeight: '700', color: BLACK, flexShrink: 1, marginRight: 10},
-  rvStars: {fontSize: 21, color: BLACK, marginLeft: 6},
-  rvDate: {fontSize: 18, color: BLACK, marginRight: 10},
-  rvText: {fontSize: 21, lineHeight: 30, color: BLACK, marginTop: 4},
-  rvBook: {fontSize: 18, color: BLACK, marginBottom: 6},
-  rvFull: {marginTop: 12},
-  pill: {borderWidth: 1.5, borderColor: BLACK, borderRadius: 14, paddingHorizontal: 9, height: 26, justifyContent: 'center', marginRight: 6},
-  pillText: {fontSize: 18, color: BLACK, includeFontPadding: false},
-  actions: shared.actions,
-  action: shared.action,
-  actionText: shared.actionText,
+  aboutLabel: {marginTop: 20},
+  description: {marginTop: 6},
+  status: {fontSize: 20, lineHeight: 30, color: BLACK, marginTop: 20},
+  statusList: {paddingTop: 8, paddingHorizontal: 32},
+  statusText: {fontSize: 22, color: BLACK},
+  small: {fontSize: 18, color: BLACK},
+  right: {marginLeft: 'auto'},
+  rv: {paddingTop: 14, paddingBottom: 6, ...shared.hair},
+  rvLine: {flexDirection: 'row', alignItems: 'baseline', gap: 12},
+  rvName: {fontSize: 21, fontWeight: '700', color: BLACK, flexShrink: 1},
+  rvStars: {fontSize: 19, letterSpacing: 1, color: BLACK},
+  rvDate: {fontSize: 18, color: BLACK, marginLeft: 'auto'},
+  rvBadges: {fontSize: 18, fontStyle: 'italic', color: BLACK},
+  badges: {flexDirection: 'row', gap: 8, marginTop: 8},
+  rvText: {marginTop: 6},
+  rvFull: {marginTop: 18, paddingTop: 18, borderTopWidth: 1, borderColor: BLACK},
+  jMeta: {flexDirection: 'row', alignItems: 'center', gap: 12},
+  links: {flexDirection: 'row', gap: 32, marginTop: 2},
+  confirm: {paddingTop: 12, paddingBottom: 10},
+  confirmButtons: {flexDirection: 'row', gap: 12, marginTop: 12},
+  editBody: {gap: 20},
+  quoteBlock: {alignSelf: 'flex-start', maxWidth: '100%'},
+  bigQuote: {fontSize: 28, lineHeight: 41},
+  source: {fontSize: 18, color: BLACK, textAlign: 'right', marginTop: 14},
+  editInput: {height: 186, marginTop: 10},
 });

@@ -5,10 +5,12 @@ import {
   operations,
   type Book,
   type Edition,
+  type LibraryEntryWithBook,
+  type LibraryListItem,
   type TokenSource,
   type UserBookStatus,
 } from '@hardcover/sdk';
-import type {CatalogueBook, PublicReview, ReadingItem} from '../core/types';
+import type {CatalogueBook, JournalItem, Privacy, PublicReview, ReadingItem} from '../core/types';
 
 // One client per credential. `auth` is a plain token (tests) or an OAuth session that refreshes itself and replays a
 // 401 once. pace: false because the SDK would wait with setTimeout, which the host only runs in lifecycle state 2 (see
@@ -27,29 +29,41 @@ function sdk(auth: Auth): HardcoverClient {
 
 const LIBRARY_PAGE = 100;
 
-// Every book on the reader's shelves (any status).
+function toItem(u: LibraryListItem | LibraryEntryWithBook): ReadingItem {
+  const r = u.userBookReads[0]; // newest first
+  return {
+    userBookId: u.id,
+    bookId: u.bookId,
+    statusId: u.statusId,
+    title: u.book?.title ?? '',
+    authors: (u.book?.cachedContributors ?? []).flatMap(x => (x.author?.name ? [x.author.name] : [])),
+    editionId: u.editionId ?? u.edition?.id ?? null,
+    editionPages: u.edition?.pages ?? null,
+    read: r ? {id: r.id, started_at: r.startedAt, finished_at: r.finishedAt, progress_pages: r.progressPages, edition_id: r.editionId} : null,
+  };
+}
+
+// Every book on the reader's shelves (any status). The whole library: only for a button press, never while reading.
 export async function fetchUserBooks(auth: Auth): Promise<ReadingItem[]> {
   const c = sdk(auth);
   const items: ReadingItem[] = [];
   for (let offset = 0; ; offset += LIBRARY_PAGE) {
     const page = await c.library.list({limit: LIBRARY_PAGE, offset});
-    for (const u of page.items) {
-      const r = u.userBookReads[0];
-      items.push({
-        userBookId: u.id,
-        bookId: u.bookId,
-        statusId: u.statusId,
-        title: u.book.title ?? '',
-        authors: (u.book.cachedContributors ?? []).flatMap(x => (x.author?.name ? [x.author.name] : [])),
-        editionId: u.editionId ?? u.edition?.id ?? null,
-        editionPages: u.edition?.pages ?? null,
-        read: r
-          ? {id: r.id, started_at: r.startedAt, finished_at: r.finishedAt, progress_pages: r.progressPages, edition_id: r.editionId}
-          : null,
-      });
-    }
+    items.push(...page.items.map(toItem));
     if (!page.hasMore) return items;
   }
+}
+
+// One library entry by its id (null: gone), with its newest read. Used at each progress push.
+export async function fetchUserBook(auth: Auth, userBookId: number): Promise<ReadingItem | null> {
+  const u = await sdk(auth).library.get(userBookId);
+  return u && toItem(u);
+}
+
+// The entry for a book, if the reader has one.
+export async function fetchUserBookForBook(auth: Auth, bookId: number): Promise<ReadingItem | null> {
+  const e = await sdk(auth).library.forBook(bookId);
+  return e ? fetchUserBook(auth, e.id) : null;
 }
 
 // A reading-journal entry, event 'quote' or 'note'. PRIVATE by default: the account default is Public, and journal.add
@@ -144,9 +158,11 @@ export const localDate = (d: Date): string =>
 export async function saveProgress(auth: Auth, item: ReadingItem, pages: number): Promise<void> {
   if (!(pages > 0)) throw new Error('refusing to save: no page count');
   const c = sdk(auth);
-  const input = progressInput(item, pages);
-  if (item.read) {
-    await c.request(operations.UpdateUserBookRead, {id: item.read.id, read: input});
+  // A finished read stays as it was: reading the book again starts a new read.
+  const open = item.read?.finished_at ? null : item.read;
+  const input = progressInput({editionId: item.editionId, read: open}, pages);
+  if (open) {
+    await c.request(operations.UpdateUserBookRead, {id: open.id, read: input});
     return;
   }
   const started_at = localDate(new Date());
@@ -244,4 +260,59 @@ export async function fetchReviews(auth: Auth, bookId: number, offset = 0): Prom
     date: (r.reviewed_at ?? '').slice(0, 10),
   }));
   return {reviews, hasMore: rows.length > REVIEWS_PAGE};
+}
+
+// ---- the book's own notes and quotes (read, edit, remove) ----
+export const JOURNAL_PAGE = 100; // the server's cap per request
+// The table also holds events the server writes (progress, status, rating...): only note and quote are the reader's own.
+// shortcut: field names come from docs/hardcover-api (guides/updatingreadingjournal.md), not yet run against the live API.
+const JOURNAL_QUERY = `query BookJournal($userId: Int!, $bookId: Int!, $limit: Int!, $offset: Int!) {
+  reading_journals(where: {user_id: {_eq: $userId}, book_id: {_eq: $bookId}, event: {_in: ["note", "quote"]}}, order_by: [{action_at: desc}, {id: desc}], limit: $limit, offset: $offset) {
+    id event entry action_at privacy_setting_id metadata
+  }
+}`;
+
+type JournalRow = {id: number; event: string; entry: string | null; action_at: string; privacy_setting_id: number; metadata: {position?: {value?: number}} | null};
+
+// `me` is a list in Hardcover's API. Not cached: the sign-in object survives an account switch, and one small request per page is cheap.
+async function userId(auth: Auth): Promise<number> {
+  const data = await sdk(auth).graphql<{me: {id: number} | {id: number}[]}>('query Me { me { id } }', {});
+  const id = [data.me].flat()[0]?.id;
+  if (typeof id !== 'number') throw new Error('Hardcover: no user id');
+  return id;
+}
+
+export async function fetchJournal(auth: Auth, bookId: number, offset = 0): Promise<{entries: JournalItem[]; hasMore: boolean}> {
+  const data = await sdk(auth).graphql<{reading_journals: JournalRow[]}>(JOURNAL_QUERY, {userId: await userId(auth), bookId, limit: JOURNAL_PAGE, offset});
+  const rows = data.reading_journals ?? [];
+  const entries = rows.map(r => ({
+    id: Number(r.id),
+    event: r.event === 'quote' ? ('quote' as const) : ('note' as const),
+    entry: r.entry ?? '',
+    page: r.metadata?.position?.value ?? null,
+    date: (r.action_at ?? '').slice(0, 10),
+    privacy: r.privacy_setting_id as Privacy,
+  }));
+  // A full page may be followed by another; a short one is the end (the server cuts a larger limit silently).
+  return {entries, hasMore: rows.length >= JOURNAL_PAGE};
+}
+
+type Mutated = {errors?: unknown} | null;
+const failed = (r: Mutated | undefined) => {
+  if (!r || (Array.isArray(r.errors) ? r.errors.length : r.errors)) throw new Error(`Hardcover refused the change: ${JSON.stringify(r?.errors ?? 'no answer')}`);
+};
+
+export async function updateJournal(auth: Auth, id: number, {entry, privacy}: {entry: string; privacy: Privacy}): Promise<void> {
+  if (!entry || !entry.trim()) throw new Error('refusing to save an empty journal entry');
+  const data = await sdk(auth).graphql<{update_reading_journal: Mutated}>(
+    'mutation EditJournal($id: Int!, $entry: String!, $privacy: Int!) { update_reading_journal(id: $id, object: {entry: $entry, privacy_setting_id: $privacy}) { errors } }',
+    {id, entry, privacy},
+  );
+  failed(data.update_reading_journal);
+}
+
+export async function deleteJournal(auth: Auth, id: number): Promise<void> {
+  // The delete output has only `id` (no `errors`, unlike update): no id back means nothing was deleted.
+  const data = await sdk(auth).graphql<{delete_reading_journal: {id: number} | null}>('mutation RemoveJournal($id: Int!) { delete_reading_journal(id: $id) { id } }', {id});
+  if (!data.delete_reading_journal?.id) throw new Error('Hardcover did not delete the entry');
 }

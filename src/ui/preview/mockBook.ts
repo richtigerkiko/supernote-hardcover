@@ -1,7 +1,7 @@
 // Mock detail data for designing the page on the emulator. It is the real Hardcover record of The Butcher of Nazareth
 // (book 2312000, fetched 2026-11-09 with books_by_pk { title subtitle release_year rating ratings_count reviews_count
 // image { url } cached_tags description } and its editions; cached_tags groups the tags by category: Genre, Mood, Tag).
-import type {BookDetail} from '../../core/types';
+import type {BookDetail, JournalItem} from '../../core/types';
 
 export const MOCK_BOOK: BookDetail = {
   title: 'The Butcher of Nazareth',
@@ -57,4 +57,11 @@ export const MOCK_REVIEWS = [
   {id: 1, user: 'Marlene', supporter: true, rating: 4.5, text: LONG_REVIEW, spoiler: false, date: '2026-10-02'},
   {id: 2, user: 'Tobias', supporter: false, rating: 3, text: 'Short and sharp.', spoiler: false, date: '2026-09-18'},
   {id: 3, user: 'A reader with a very long display name indeed', supporter: false, rating: null, text: 'The ending ruined it for me.', spoiler: true, date: '2026-09-01'},
+];
+
+// Mock journal for the emulator preview (shape of hardcover.fetchJournal).
+export const MOCK_JOURNAL: JournalItem[] = [
+  {id: 1, event: 'quote', entry: 'Call me Ishmael. Some years ago, never mind how long precisely.\n\n━━━\n\nThe best opening line.', page: 1, date: '2026-11-10', privacy: 3},
+  {id: 2, event: 'note', entry: 'Slow start, but the second act pays it off.', page: 106, date: '2026-11-08', privacy: 1},
+  {id: 3, event: 'quote', entry: 'A quote with no thoughts of its own.', page: null, date: '2026-11-01', privacy: 2},
 ];

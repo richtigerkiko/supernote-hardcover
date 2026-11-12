@@ -2,7 +2,6 @@ import {toPages} from './match';
 import type {ReadingItem, Sample} from './types';
 
 const PUSH_INTERVAL_MS = 10_000; // at most one push per book in this window; a page turned inside it goes out at the first touch after
-const RECHECK_MS = 600_000; // look a book up again after this (you may have added it to Hardcover, or its reading entry changed)
 const RETRY_MS = 60_000;
 const RATE_LIMIT_RETRY_MS = 300_000;
 const BUSY_EXPIRY_MS = 60_000;
@@ -16,6 +15,7 @@ const BUSY_EXPIRY_MS = 60_000;
 //  - throttle: at most one push per PUSH_INTERVAL_MS per book (checked against timestamps at touch time, as no timer
 //    runs in some lifecycle states); the latest page stays pending and goes out at the first touch after the window
 //  - a book Hardcover cannot match (not on any of your shelves) is never pushed
+//  - a book is resolved once per forget(): no timed re-check (that was a full library fetch); the page changes it
 // resolve(path) -> reading item | null; push(item, pages) -> Promise; both are injected.
 // tick(sample) takes {path, page (0-based), total} or null when the reader gave nothing usable (a note, the screen
 // asleep). It is called at touches (no timers run in some lifecycle states); a null sample still retries a failed push.
@@ -28,7 +28,6 @@ interface Tracked {
   total: number; // reader pages at the last touch
   pending: number | null; // edition page waiting to be pushed
   retryAt: number;
-  checkedAt: number;
 }
 
 export interface TrackerDeps {
@@ -39,28 +38,15 @@ export interface TrackerDeps {
 
 export function createTracker({resolve, push, now = Date.now}: TrackerDeps) {
   const books = new Map<string, Tracked>();
-  const state: {lastError: TrackerError | null; lastPush: {path: string; title: string; pages: number; at: number} | null} = {
-    lastError: null,
-    lastPush: null,
-  };
+  const state: {lastError: TrackerError | null} = {lastError: null};
   let busyAt = 0; // wall-clock start of the running tick, 0 when idle
 
   async function observe({path, page, total}: Sample): Promise<void> {
     if (!(total > 0) || !(page >= 0)) return;
     let b = books.get(path);
-    if (b && now() - b.checkedAt >= RECHECK_MS) {
-      b.checkedAt = now(); // also when resolve throws (offline), so it is not retried on every touch; the old item stays
-      const was = b.item;
-      b.item = await resolve(path);
-      if (was?.editionPages !== b.item?.editionPages) {
-        b.pages = toPages(page, total, b.item?.editionPages ?? null); // newly matched or a new edition: the old pages are in other units, so rebase
-        b.pending = null;
-      }
-      if (!b.item) b.pending = null; // it left the list: nothing to push
-    }
     if (!b) {
       const item = await resolve(path);
-      books.set(path, {item, pages: toPages(page, total, item?.editionPages ?? null), total, pending: null, retryAt: 0, checkedAt: now()});
+      books.set(path, {item, pages: toPages(page, total, item?.editionPages ?? null), total, pending: null, retryAt: 0});
       return;
     }
     if (!b.item) return;
@@ -91,7 +77,6 @@ export function createTracker({resolve, push, now = Date.now}: TrackerDeps) {
         b.pages = p;
         b.pending = null;
         b.retryAt = now() + PUSH_INTERVAL_MS;
-        state.lastPush = {path, title: item.title, pages: p, at: now()};
         state.lastError = null;
       } catch (err) {
         const e = err as TrackerError;
@@ -104,6 +89,8 @@ export function createTracker({resolve, push, now = Date.now}: TrackerDeps) {
 
   return {
     state,
+    /** A page is waiting to be pushed (or retried). */
+    hasPending: () => [...books.values()].some(b => b.pending !== null),
     // After a sign-in: the cached items hold the previous account's ids (userBookId, read id), so every book resolves
     // again at its next touch (no push on first sight) and an error from the old credentials is gone.
     reset() {

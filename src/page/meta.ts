@@ -9,6 +9,9 @@ type Cache = ReturnType<typeof createMetaCache>;
 export function createMeta({read, cache}: {read: (path: string) => Promise<EpubMeta>; cache: () => Promise<Cache>}) {
   const mem = new Map<string, FileMeta>();
   const persistent = () => cache().catch(() => null);
+  // The files with tracking on, so a touch can skip the SDK when there are none. Starts from the saved cache.
+  let on: Promise<Set<string>> | null = null;
+  const tracked = () => (on ??= persistent().then(async c => new Set(c ? await c.tracked().catch(() => []) : [])));
 
   async function get(path: string): Promise<FileMeta> {
     let meta = mem.get(path);
@@ -26,6 +29,7 @@ export function createMeta({read, cache}: {read: (path: string) => Promise<EpubM
         return meta;
       }
       if (c) c.set(path, meta).catch(() => {});
+      (await tracked()).delete(path); // a new or replaced file starts with tracking off
     }
     mem.set(path, meta);
     return meta;
@@ -33,7 +37,11 @@ export function createMeta({read, cache}: {read: (path: string) => Promise<EpubM
 
   return {
     get,
-    save: async (path: string, meta: FileMeta) => (await persistent())?.set(path, meta).catch(() => {}),
+    save: async (path: string, meta: FileMeta) => {
+      (await tracked())[meta.tracking ? 'add' : 'delete'](path);
+      await (await persistent())?.set(path, meta).catch(() => {});
+    },
+    anyTracked: async () => (await tracked()).size > 0,
     /** A button press tries a failed read again. */
     retry: (path: string) => {
       if (mem.get(path)?.failed) mem.delete(path);

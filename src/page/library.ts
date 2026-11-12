@@ -11,17 +11,22 @@ import type {Meta} from './meta';
 export type Client = Pick<
   typeof client,
   | 'addOwned'
+  | 'deleteJournal'
   | 'bookIdsForIsbns'
   | 'editionsForIsbns'
   | 'fetchBookDetail'
+  | 'fetchJournal'
   | 'fetchReview'
   | 'fetchReviews'
+  | 'fetchUserBook'
+  | 'fetchUserBookForBook'
   | 'fetchUserBooks'
   | 'saveJournal'
   | 'saveProgress'
   | 'saveReview'
   | 'searchBooks'
   | 'setStatus'
+  | 'updateJournal'
 >;
 export type Dialog = (tip: string, left: string, right: string, ok: boolean) => Promise<unknown>;
 
@@ -48,12 +53,9 @@ export function createLibrary({auth, hc, meta, dialog}: {auth: OAuthSession; hc:
     return withEdition(item, m.edition); // the edition the reader picked for this file, if any
   }
 
-  // The library entry for a catalogue book, from a freshly fetched list: a failed match (missing author, ambiguous title) or
+  // The library entry for a catalogue book, asked for that book only: a failed match (missing author, ambiguous title) or
   // the cached list can hide an entry that exists, and an existing entry must never be written to here.
-  async function entryFor(bookId: number) {
-    drop();
-    return (await list()).find(r => r.bookId === bookId) ?? null;
-  }
+  const entryFor = (bookId: number) => hc.fetchUserBookForBook(auth, bookId);
 
   // Having the EPUB means owning the book: add the catalogue book `link` to the library (Want to Read) with its edition
   // marked as owned, and return its library item. The edition (when it has pages) is saved for this file, so tracking
@@ -64,6 +66,7 @@ export function createLibrary({auth, hc, meta, dialog}: {auth: OAuthSession; hc:
       const ed = await withTimeout(hc.addOwned(auth, link.bookId, link.editionId), 20_000, 'add to library');
       if (ed.pages && !m.edition) m.edition = {id: ed.id, pages: ed.pages};
       item = await entryFor(link.bookId);
+      drop(); // the cached list lacks the new entry
     }
     delete m.linked;
     await meta.save(path, m);

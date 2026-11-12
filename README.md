@@ -19,7 +19,7 @@ Copy `supernote-hardcover.snplg` to the device's `MyStyle` folder, then Settings
 
 ## Build from source
 
-Needs Node, JDK 17 and the Android SDK (platform 35, build-tools 35.0.0, NDK 27.1.12297006), and your Hardcover OAuth client id (a public client with the device grant) as `HARDCOVER_OAUTH_CLIENT_ID` in `../../.env`.
+Needs Node, JDK 17 and the Android SDK (platform 35, build-tools 35.0.0, NDK 27.1.12297006), and your Hardcover OAuth client id (a public client with the device grant) as the environment variable `HARDCOVER_OAUTH_CLIENT_ID`, or in a `.env` file in the repo root.
 
 ```powershell
 npm install

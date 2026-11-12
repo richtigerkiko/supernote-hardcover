@@ -1,5 +1,5 @@
 import type {ReadingItem} from '../../src/core/types';
-import {bookIdsForIsbns, fetchBookDetail, fetchUserBooks, localDate, progressInput, saveProgress, saveJournal, saveReview, fetchReview, setStatus} from '../../src/hardcover/client';
+import {fetchUserBookForBook, bookIdsForIsbns, fetchBookDetail, fetchUserBooks, localDate, progressInput, saveProgress, saveJournal, saveReview, fetchReview, setStatus} from '../../src/hardcover/client';
 
 // The SDK is the transport; these tests check what we send it and how we map what it returns.
 type Mocks = Record<string, jest.Mock>;
@@ -263,4 +263,66 @@ describe('fetchReviews', () => {
     expect(r.hasMore).toBe(true);
     expect(r.reviews[0]).toEqual({id: 1, user: 'Ann', supporter: true, rating: 4.5, text: 'Great', spoiler: false, date: '2026-10-02'});
   });
+});
+
+describe('journal read, edit, remove', () => {
+  const { fetchJournal, updateJournal, deleteJournal } = require('../../src/hardcover/client');
+  const row = (id: number, over: any = {}) => ({id, event: 'quote', entry: 'q', action_at: '2026-11-10T08:00:00', privacy_setting_id: 3, metadata: {position: {value: 83}}, ...over});
+
+  test('fetchJournal asks for the user\'s note/quote rows, maps them and pages by the full 100', async () => {
+    mockSdk.graphql = jest.fn(async (q: string) => (q.includes('Me') ? {me: [{id: 9}]} : {reading_journals: Array.from({length: 100}, (_, i) => row(i + 1, i ? {metadata: null} : {}))}));
+    const r = await fetchJournal({}, 5, 100);
+    expect(mockSdk.graphql.mock.calls[1][0]).toContain('["note", "quote"]');
+    expect(mockSdk.graphql.mock.calls[1][1]).toEqual({userId: 9, bookId: 5, limit: 100, offset: 100});
+    expect(r.hasMore).toBe(true);
+    expect(r.entries[0]).toEqual({id: 1, event: 'quote', entry: 'q', page: 83, date: '2026-11-10', privacy: 3});
+    expect(r.entries[1].page).toBeNull();
+  });
+
+  test('a short page is the end', async () => {
+    mockSdk.graphql = jest.fn(async (q: string) => (q.includes('Me') ? {me: {id: 9}} : {reading_journals: [row(1, {event: 'note'})]}));
+    const r = await fetchJournal({}, 5);
+    expect(r.hasMore).toBe(false);
+    expect(r.entries[0].event).toBe('note');
+  });
+
+  test('update sends entry and privacy, refuses empty text and surfaces server errors', async () => {
+    mockSdk.graphql = jest.fn().mockResolvedValue({update_reading_journal: {errors: null}});
+    await updateJournal('t', 7, {entry: 'new', privacy: 2});
+    expect(mockSdk.graphql.mock.calls[0][1]).toEqual({id: 7, entry: 'new', privacy: 2});
+    await expect(updateJournal('t', 7, {entry: '  ', privacy: 2})).rejects.toThrow(/empty/);
+    mockSdk.graphql = jest.fn().mockResolvedValue({update_reading_journal: {errors: ['nope']}});
+    await expect(updateJournal('t', 7, {entry: 'x', privacy: 2})).rejects.toThrow(/refused/);
+  });
+
+  test('delete sends the id and surfaces server errors', async () => {
+    mockSdk.graphql = jest.fn().mockResolvedValue({delete_reading_journal: {id: 7}});
+    await deleteJournal('t', 7);
+    expect(mockSdk.graphql.mock.calls[0][1]).toEqual({id: 7});
+    mockSdk.graphql = jest.fn().mockResolvedValue({delete_reading_journal: null});
+    await expect(deleteJournal('t', 7)).rejects.toThrow(/did not delete/);
+  });
+});
+
+test('saveProgress leaves a finished read alone and inserts a new one', async () => {
+  mockSdk.request.mockResolvedValue({insert_user_book_read: {userBookRead: {id: 56}}});
+  const finished = {...ITEM, read: {...ITEM.read!, finished_at: '2026-10-01'}};
+  await saveProgress('T', finished, 40);
+  const [op, vars] = mockSdk.request.mock.calls[0];
+  expect(op).toBe('ADD');
+  expect(vars.read).not.toHaveProperty('finished_at');
+  expect(vars.read).toMatchObject({progress_pages: 40, started_at: localDate(new Date())});
+});
+
+test('fetchUserBookForBook finds the entry for one book and reads that row only', async () => {
+  mockSdk.library.forBook = jest.fn(async () => ({id: 7}));
+  mockSdk.library.get = jest.fn(async () => ({
+    id: 7, bookId: 5, statusId: 2, editionId: 9, edition: {id: 9, pages: 300}, book: {title: 'T', cachedContributors: []},
+    userBookReads: [{id: 3, startedAt: 's', finishedAt: null, progressPages: 1, editionId: 9}, {id: 2}],
+  }));
+  const it = await fetchUserBookForBook('T', 5);
+  expect(it).toMatchObject({userBookId: 7, editionPages: 300, read: {id: 3}});
+  expect(mockSdk.library.forBook).toHaveBeenCalledWith(5);
+  mockSdk.library.forBook = jest.fn(async () => null);
+  expect(await fetchUserBookForBook('T', 5)).toBeNull();
 });

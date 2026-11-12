@@ -1,5 +1,5 @@
 /**
- * Root component, shown when the Hardcover button opens the plugin view (full screen on the Nomad). src/plugin.ts hands over
+ * Root component, shown when the Hardcover button opens the plugin view (full screen; sizes are Nomad dp, scaled to other windows by Scaled in theme.tsx). src/plugin.ts hands over
  * the data and actions through src/page/session.ts. Under the emulator's fake SDK (Metro with SN_FAKE_SDK=1, see the
  * workspace CLAUDE.md) it shows mock data instead, to design the page at the Nomad's real size.
  *
@@ -7,16 +7,28 @@
  */
 
 import React, {useEffect, useState} from 'react';
-import {View} from 'react-native';
+import {useWindowDimensions, View} from 'react-native';
 import DetailPage from './DetailPage';
 import JournalPage from './JournalPage';
 import Message from './Message';
 import ReviewPage from './ReviewPage';
-import {MOCK_BOOK, MOCK_LONG, MOCK_REVIEWS} from './preview/mockBook';
+import {MOCK_BOOK, MOCK_JOURNAL, MOCK_LONG, MOCK_REVIEWS} from './preview/mockBook';
 import {BLANK_REVIEW, type BookDetail, type Review} from '../core/types';
 import {session} from '../page/session';
+import {joinEntry, splitEntry} from '../core/journal';
+import {log} from '../core/util';
+import {Scaled, windowFacts} from './theme';
 
 export default function App(): React.JSX.Element {
+  return (
+    <Scaled>
+      <AppInner />
+    </Scaled>
+  );
+}
+
+function AppInner(): React.JSX.Element {
+  const win = useWindowDimensions();
   const [preview, setPreview] = useState<boolean | null>(null);
   const [tracking, setTracking] = useState(false); // per document, off until switched on for the open book
   const [syncNote, setSyncNote] = useState('');
@@ -26,11 +38,16 @@ export default function App(): React.JSX.Element {
   const [canSignIn, setCanSignIn] = useState(false); // the message offers the Sign in button
   const [signingIn, setSigningIn] = useState(false);
   const [qr, setQr] = useState(''); // the sign-in link as a QR code, while waiting for the approval
+  const [code, setCode] = useState<{uri: string; code: string} | undefined>(); // the sign-in URL and code, shown with the QR code
+  const [failed, setFailed] = useState(false); // loading the book failed: the message offers Retry
   const [journal, setJournal] = useState<{passage: string} | null>(null); // set: the hardcover-select page is shown
   const [review, setReview] = useState<Review | null>(null); // set: the review card is shown, starting from this
 
   useEffect(() => {
     session.isFakeSdk().then(setPreview, () => setPreview(false));
+    // For tester reports from other models (see CLAUDE.md "Other models").
+    session.deviceType().then(t => log('window', windowFacts(win), 'device type', t), () => log('window', windowFacts(win), 'device type unknown'));
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the window facts are logged once, at mount
   }, []);
 
   // On the device: load the open book now, and again on every press of the toolbar button (the view stays mounted).
@@ -43,6 +60,8 @@ export default function App(): React.JSX.Element {
       setMessage('Loading…');
       setCanSignIn(false);
       setQr('');
+      setCode(undefined);
+      setFailed(false);
       setTracking(false);
       setSyncNote('');
       setJournal(null);
@@ -63,22 +82,36 @@ export default function App(): React.JSX.Element {
             setCanSignIn(!!r.signIn);
           }
         })
-        .catch((e: any) => mine === latest && setMessage(`Could not load the book: ${String(e?.message ?? e)}`));
+        .catch((e: any) => {
+          if (mine !== latest) return;
+          setMessage(`Could not load the book: ${String(e?.message ?? e)}`);
+          setFailed(true);
+        });
     };
     load();
     return session.onOpen(load);
   }, [preview]);
 
   if (preview === null) return <View />;
+  const msg = (e: any) => String(e?.message ?? e);
   const toggle = () => {
     const on = !tracking;
     setTracking(on);
-    session.api?.setTracking(on);
+    session.api?.setTracking(on).catch((e: any) => {
+      setTracking(!on);
+      setSyncNote(`Could not turn tracking ${on ? 'on' : 'off'}: ${msg(e)}`);
+    });
   };
+  // editionSaved is set only after the plugin accepted the edition.
+  const pickEdition = (editionId: string, b: BookDetail) =>
+    session.api?.setEdition(editionId).then(
+      () => setBook({...b, editionId, editionSaved: true}),
+      (e: any) => setSyncNote(`Could not change the edition: ${msg(e)}`),
+    );
 
   if (preview) {
     // preview only: mock data. The Tracking toggle also flips between the normal and the worst-case mock; Write review
-    // opens the review card and Close on the detail page the journal card (their Close and saves come back here; every
+    // opens the review page and Close on the detail page the journal page (their Close and saves come back here; every
     // second save fails, to see Retry).
     const flaky = () => new Promise<void>((ok, fail) => (Date.now() % 2 ? ok() : fail(new Error('Network request failed'))));
     if (review) return <ReviewPage book={book ?? MOCK_BOOK} initial={review} onSave={flaky} onClose={() => setReview(null)} />;
@@ -104,6 +137,9 @@ export default function App(): React.JSX.Element {
         onClose={() => setJournal({passage: 'Call me Ishmael. Some years ago, never mind how long precisely, having little or no money in my purse, I thought I would sail about a little and see the watery part of the world.'})}
         onWriteReview={() => setReview(BLANK_REVIEW)}
         onLoadReviews={() => Promise.resolve({reviews: MOCK_REVIEWS, hasMore: false})}
+        onLoadJournal={() => Promise.resolve({entries: MOCK_JOURNAL, hasMore: false})}
+        onEditJournal={(item, text) => Promise.resolve(item.event === 'note' ? text : joinEntry(splitEntry('quote', item.entry).passage, text))}
+        onRemoveJournal={() => flaky()}
         onSetStatus={status => setBook({...(book ?? MOCK_BOOK), status})}
         onSetEdition={editionId => setBook({...(book ?? MOCK_BOOK), editionId, editionSaved: true})}
       />
@@ -114,35 +150,29 @@ export default function App(): React.JSX.Element {
     if (signingIn) return;
     setSigningIn(true);
     session.api!
-      .signIn((uri, code, qr) => {
-        setQr(qr);
-        setMessage(`On any device open
-${uri}
-and enter the code
-
-${code}`);
+      .signIn((uri, userCode, link) => {
+        setQr(link);
+        setCode({uri, code: userCode});
       })
       .then(
         ok => ok && session.opened(), // reload: the account is connected now (false: cancelled by a reload)
         (e: any) => {
           setQr('');
+          setCode(undefined);
           setMessage(`Sign-in failed: ${String(e?.message ?? e)}`);
           setCanSignIn(true);
         },
       )
       .finally(() => setSigningIn(false));
   };
-  if (!book) return <Message text={message} qr={qr} onClose={session.close} onSignIn={canSignIn && !signingIn ? signIn : undefined} />;
+  if (!book) return <Message text={message} qr={qr} code={code} onClose={session.close} onSignIn={canSignIn && !signingIn ? signIn : undefined} onRetry={failed ? session.opened : undefined} />;
   if (review) return <ReviewPage book={book} initial={review} onSave={r => session.api!.saveReview(r)} onClose={() => setReview(null)} />;
   if (journal) {
     return (
       <JournalPage
         book={book}
         passage={journal.passage}
-        onSetEdition={editionId => {
-          setBook({...book, editionId, editionSaved: true});
-          session.api?.setEdition(editionId);
-        }}
+        onSetEdition={editionId => pickEdition(editionId, book)}
         onSave={e => session.api!.saveJournal(e)}
         onClose={session.close}
       />
@@ -162,15 +192,18 @@ ${code}`);
         )
       }
       onLoadReviews={offset => session.api!.loadReviews(offset)}
+      onLoadJournal={offset => session.api!.loadJournal(offset)}
+      onEditJournal={(item, text, privacy) => session.api!.editJournal(item, text, privacy)}
+      onRemoveJournal={id => session.api!.removeJournal(id)}
       onSetStatus={status => {
         const before = book.status;
         setBook({...book, status});
-        session.api?.setStatus(status).catch(() => setBook(b => (b ? {...b, status: before} : b)));
+        session.api?.setStatus(status).catch((e: any) => {
+          setBook(b => (b ? {...b, status: before} : b));
+          setSyncNote(`Could not change the status: ${msg(e)}`);
+        });
       }}
-      onSetEdition={editionId => {
-        setBook({...book, editionId, editionSaved: true});
-        session.api?.setEdition(editionId);
-      }}
+      onSetEdition={editionId => pickEdition(editionId, book)}
       onAddToLibrary={() =>
         Promise.resolve(session.api?.addToLibrary()).then(
           () => session.opened(), // reload: the book is now on the shelves

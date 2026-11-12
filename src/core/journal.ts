@@ -17,3 +17,16 @@ export function journalEntry(event: 'quote' | 'note', passage: string | null | u
   const quote = cleanQuote(passage);
   return quote && thoughts ? quote + SEPARATOR + thoughts : quote;
 }
+
+// The inverse of journalEntry: a quote is passage + SEPARATOR + thoughts (thoughts optional), a note is all thoughts.
+export function splitEntry(event: 'quote' | 'note', entry: string): {passage: string; thoughts: string} {
+  if (event === 'note') return {passage: '', thoughts: entry};
+  const i = entry.indexOf(SEPARATOR);
+  return i < 0 ? {passage: entry, thoughts: ''} : {passage: entry.slice(0, i), thoughts: entry.slice(i + SEPARATOR.length)};
+}
+
+// An edited entry: the passage is kept exactly as stored (cleanQuote would reflow another client's line breaks).
+export const joinEntry = (passage: string, thoughts: string): string => {
+  const t = thoughts.trim();
+  return passage && t ? passage + SEPARATOR + t : passage || t;
+};
