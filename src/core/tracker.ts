@@ -38,10 +38,7 @@ export interface TrackerDeps {
 
 export function createTracker({resolve, push, now = Date.now}: TrackerDeps) {
   const books = new Map<string, Tracked>();
-  const state: {lastError: TrackerError | null; lastPush: {path: string; title: string; pages: number; at: number} | null} = {
-    lastError: null,
-    lastPush: null,
-  };
+  const state: {lastError: TrackerError | null} = {lastError: null};
   let busyAt = 0; // wall-clock start of the running tick, 0 when idle
 
   async function observe({path, page, total}: Sample): Promise<void> {
@@ -80,7 +77,6 @@ export function createTracker({resolve, push, now = Date.now}: TrackerDeps) {
         b.pages = p;
         b.pending = null;
         b.retryAt = now() + PUSH_INTERVAL_MS;
-        state.lastPush = {path, title: item.title, pages: p, at: now()};
         state.lastError = null;
       } catch (err) {
         const e = err as TrackerError;

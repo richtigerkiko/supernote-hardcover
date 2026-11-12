@@ -38,6 +38,8 @@ function AppInner(): React.JSX.Element {
   const [canSignIn, setCanSignIn] = useState(false); // the message offers the Sign in button
   const [signingIn, setSigningIn] = useState(false);
   const [qr, setQr] = useState(''); // the sign-in link as a QR code, while waiting for the approval
+  const [code, setCode] = useState<{uri: string; code: string} | undefined>(); // the sign-in URL and code, shown with the QR code
+  const [failed, setFailed] = useState(false); // loading the book failed: the message offers Retry
   const [journal, setJournal] = useState<{passage: string} | null>(null); // set: the hardcover-select page is shown
   const [review, setReview] = useState<Review | null>(null); // set: the review card is shown, starting from this
 
@@ -58,6 +60,8 @@ function AppInner(): React.JSX.Element {
       setMessage('Loading…');
       setCanSignIn(false);
       setQr('');
+      setCode(undefined);
+      setFailed(false);
       setTracking(false);
       setSyncNote('');
       setJournal(null);
@@ -78,7 +82,11 @@ function AppInner(): React.JSX.Element {
             setCanSignIn(!!r.signIn);
           }
         })
-        .catch((e: any) => mine === latest && setMessage(`Could not load the book: ${String(e?.message ?? e)}`));
+        .catch((e: any) => {
+          if (mine !== latest) return;
+          setMessage(`Could not load the book: ${String(e?.message ?? e)}`);
+          setFailed(true);
+        });
     };
     load();
     return session.onOpen(load);
@@ -103,7 +111,7 @@ function AppInner(): React.JSX.Element {
 
   if (preview) {
     // preview only: mock data. The Tracking toggle also flips between the normal and the worst-case mock; Write review
-    // opens the review card and Close on the detail page the journal card (their Close and saves come back here; every
+    // opens the review page and Close on the detail page the journal page (their Close and saves come back here; every
     // second save fails, to see Retry).
     const flaky = () => new Promise<void>((ok, fail) => (Date.now() % 2 ? ok() : fail(new Error('Network request failed'))));
     if (review) return <ReviewPage book={book ?? MOCK_BOOK} initial={review} onSave={flaky} onClose={() => setReview(null)} />;
@@ -142,25 +150,22 @@ function AppInner(): React.JSX.Element {
     if (signingIn) return;
     setSigningIn(true);
     session.api!
-      .signIn((uri, code, qr) => {
-        setQr(qr);
-        setMessage(`On any device open
-${uri}
-and enter the code
-
-${code}`);
+      .signIn((uri, userCode, link) => {
+        setQr(link);
+        setCode({uri, code: userCode});
       })
       .then(
         ok => ok && session.opened(), // reload: the account is connected now (false: cancelled by a reload)
         (e: any) => {
           setQr('');
+          setCode(undefined);
           setMessage(`Sign-in failed: ${String(e?.message ?? e)}`);
           setCanSignIn(true);
         },
       )
       .finally(() => setSigningIn(false));
   };
-  if (!book) return <Message text={message} qr={qr} onClose={session.close} onSignIn={canSignIn && !signingIn ? signIn : undefined} />;
+  if (!book) return <Message text={message} qr={qr} code={code} onClose={session.close} onSignIn={canSignIn && !signingIn ? signIn : undefined} onRetry={failed ? session.opened : undefined} />;
   if (review) return <ReviewPage book={book} initial={review} onSave={r => session.api!.saveReview(r)} onClose={() => setReview(null)} />;
   if (journal) {
     return (

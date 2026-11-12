@@ -1,10 +1,10 @@
 import React, {useRef, useState} from 'react';
 import {PanResponder, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import {BLANK_REVIEW, type BookDetail, type Review} from '../core/types';
-import {BLACK, WHITE, shared} from './theme';
+import {BLACK, Button, SERIF, TopBar, WHITE, shared} from './theme';
 
-// Review card, presentational like JournalPage: no SDK, everything arrives as props.
-// Same e-ink rules: black on white, borders instead of greys, tap targets of at least 48 dp, text of at least 18 sp.
+// "Write review" page, presentational like JournalPage: no SDK, everything arrives as props.
+// Quiet page rules (theme.tsx): tap targets of at least 48 dp, text of at least 18 sp.
 
 type Props = {
   book: BookDetail;
@@ -75,8 +75,8 @@ function Stars({value, onChange, disabled}: {value: number; onChange: (v: number
 function Check({label, on, busy, onPress}: {label: string; on: boolean; busy: boolean; onPress: () => void}) {
   return (
     <Pressable accessibilityRole="checkbox" accessibilityLabel={label} accessibilityState={{checked: on, disabled: busy}} disabled={busy} style={styles.check} onPress={onPress}>
-      <View style={[styles.box, on && styles.fill]}>{on ? <Text style={[styles.checkMark, styles.white]}>✓</Text> : null}</View>
-      <Text style={styles.line}>{label}</Text>
+      <View style={[styles.box, on && shared.fill]}>{on ? <Text style={styles.checkMark}>✓</Text> : null}</View>
+      <Text style={styles.checkText}>{label}</Text>
     </Pressable>
   );
 }
@@ -104,103 +104,80 @@ export default function ReviewPage({book, initial = BLANK_REVIEW, onSave, onClos
   };
 
   return (
-    <View style={styles.root}>
-      <View style={styles.card}>
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>
-          <View style={styles.header}>
-            <Text style={styles.heading}>Write review</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="Close" style={styles.close} onPress={onClose}>
-              <Text style={styles.closeText}>✕</Text>
-            </Pressable>
-          </View>
-          <Text style={[styles.line, styles.bold]} numberOfLines={1}>
-            {book.title}
-          </Text>
-          {state === 'saved' ? (
-            <>
-              <Text style={styles.done}>✓ Review saved</Text>
-              {rating ? <Text style={styles.line}>{`Rating: ${rating} / 5`}</Text> : null}
-              <Pressable accessibilityRole="button" style={[styles.button, styles.fill]} onPress={onClose}>
-                <Text style={[styles.buttonText, styles.white]}>Close</Text>
-              </Pressable>
-            </>
-          ) : (
-            <>
-              <Stars value={rating} onChange={setRating} disabled={busy} />
-              <TextInput
-                accessibilityLabel="Review"
-                style={[styles.input, {height: 6 * 28 + 24}]}
-                multiline
-                numberOfLines={6}
-                textAlignVertical="top"
-                editable={!busy}
-                placeholder="What did you think?"
-                placeholderTextColor={BLACK}
-                value={text}
-                onChangeText={setText}
-              />
-              <View style={styles.checks}>
+    <View style={shared.page}>
+      <TopBar icon="close" title="Write review" onPress={onClose} />
+      <ScrollView style={styles.flex} keyboardShouldPersistTaps="handled" contentContainerStyle={[shared.body, styles.body]}>
+        <Text style={styles.title} numberOfLines={1}>
+          {book.title}
+        </Text>
+        {state === 'saved' ? (
+          <>
+            <Text style={styles.done}>✓ Review saved</Text>
+            {rating ? <Text style={shared.text}>{`Rating: ${rating} / 5`}</Text> : null}
+          </>
+        ) : (
+          <>
+            <Stars value={rating} onChange={setRating} disabled={busy} />
+            <TextInput
+              accessibilityLabel="Review"
+              style={[shared.input, {height: 216}]}
+              multiline
+              numberOfLines={6}
+              textAlignVertical="top"
+              editable={!busy}
+              placeholder="What did you think?"
+              placeholderTextColor={BLACK}
+              value={text}
+              onChangeText={setText}
+            />
+            <View style={styles.checks}>
               <Check label="This review contains spoilers" on={spoilers} busy={busy} onPress={() => setSpoilers(v => !v)} />
               <Check label="Sponsored or ARC review" on={sponsored} busy={busy} onPress={() => setSponsored(v => !v)} />
-              </View>
-              <View>
-                <Text style={styles.label}>Private notes</Text>
-                <TextInput
-                  accessibilityLabel="Private notes"
-                  style={[styles.input, {height: 3 * 28 + 24}]}
-                  multiline
-                  numberOfLines={3}
-                  textAlignVertical="top"
-                  editable={!busy}
-                  placeholder="For your eyes only."
-                  placeholderTextColor={BLACK}
-                  value={notes}
-                  onChangeText={setNotes}
-                />
-              </View>
-              {state === 'error' ? <Text style={[styles.line, styles.bold]}>{error}</Text> : null}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Save"
-                accessibilityState={{disabled: busy || empty}}
-                disabled={busy || empty}
-                style={[styles.button, !(busy || empty) && styles.fill]}
-                onPress={save}>
-                <Text style={[styles.buttonText, !(busy || empty) && styles.white]}>{busy ? 'Saving…' : state === 'error' ? 'Retry' : 'Save'}</Text>
-              </Pressable>
-            </>
-          )}
-        </ScrollView>
+            </View>
+            <View>
+              <Text style={shared.label}>Private notes</Text>
+              <TextInput
+                accessibilityLabel="Private notes"
+                style={[shared.input, {height: 126, marginTop: 10}]}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+                editable={!busy}
+                placeholder="For your eyes only."
+                placeholderTextColor={BLACK}
+                value={notes}
+                onChangeText={setNotes}
+              />
+            </View>
+            {state === 'error' ? <Text style={[shared.text, shared.bold]}>{error}</Text> : null}
+          </>
+        )}
+      </ScrollView>
+      <View style={shared.actions}>
+        {state === 'saved' ? (
+          <Button label="Close" solid onPress={onClose} />
+        ) : (
+          <Button label={busy ? 'Saving…' : state === 'error' ? 'Retry' : 'Save'} accessibilityLabel="Save" solid disabled={busy || empty} onPress={save} />
+        )}
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1, alignItems: 'center', paddingTop: 24, paddingHorizontal: 24, paddingBottom: 24, backgroundColor: 'transparent'},
-  card: {width: '100%', maxWidth: 701, flexShrink: 1, borderWidth: 3, borderColor: BLACK, backgroundColor: WHITE},
-  body: {padding: 24, gap: 16},
-  header: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
-  heading: {fontSize: 22, fontWeight: '700', color: BLACK},
-  close: shared.closeBox,
-  closeText: shared.closeText,
+  flex: {flex: 1},
+  body: {gap: 18},
+  title: {fontFamily: SERIF, fontSize: 26, lineHeight: 34, fontWeight: '700', color: BLACK},
   stars: {flexDirection: 'row', height: 64},
   star: {flex: 1, height: 64, alignItems: 'center', justifyContent: 'center'},
   starGlyph: {fontSize: 52, lineHeight: 64, color: BLACK},
   // the solid star, clipped to the rated share of its cell, over the outline star
   starClip: {position: 'absolute', left: 0, top: 0, bottom: 0, overflow: 'hidden'},
   starCell: {height: 64, alignItems: 'center', justifyContent: 'center'},
-  input: {fontSize: 20, lineHeight: 28, borderWidth: 2, borderColor: BLACK, padding: 12, color: BLACK},
-  label: {fontSize: 18, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', color: BLACK, marginBottom: 6},
   checks: {flexDirection: 'row', gap: 16},
   check: {flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56},
-  box: {width: 40, height: 40, borderWidth: 3, borderColor: BLACK, alignItems: 'center', justifyContent: 'center'},
-  checkMark: {fontSize: 26, fontWeight: '700'},
-  line: {fontSize: 20, color: BLACK},
-  bold: {fontWeight: '700'},
-  fill: {backgroundColor: BLACK},
-  white: {color: WHITE},
-  button: {height: 68, borderWidth: 3, borderColor: BLACK, alignItems: 'center', justifyContent: 'center', backgroundColor: WHITE},
-  buttonText: {fontSize: 24, fontWeight: '700', color: BLACK},
+  box: {width: 32, height: 32, borderWidth: 2, borderColor: BLACK, borderRadius: 8, alignItems: 'center', justifyContent: 'center'},
+  checkMark: {fontSize: 22, lineHeight: 26, fontWeight: '700', color: WHITE},
+  checkText: {flex: 1, fontSize: 19, color: BLACK},
   done: {fontSize: 28, fontWeight: '700', color: BLACK},
 });

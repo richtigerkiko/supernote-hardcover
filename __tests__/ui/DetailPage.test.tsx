@@ -32,10 +32,10 @@ test('shows the book, its progress on the chosen edition, chips and the tracking
   expect(t).toContain('The Butcher of Nazareth');
   expect(t).toContain('David Scott Hay');
   expect(t).toContain('3.8');
-  expect(t).toContain('Page 106 of 330 · 32%');
+  expect(t).toContain('Page |106| of 330|32%');
   expect(t).toContain('Horror');
-  expect(t).toContain('Currently reading ▾');
-  expect(t).toContain('ON');
+  expect(t).toContain('Currently reading');
+  expect(t).toContain('Tracking on');
 });
 
 test('the edition block joins only the parts that exist', () => {
@@ -48,7 +48,7 @@ test('the edition block joins only the parts that exist', () => {
 test('the toggle shows OFF when tracking is paused and calls back when pressed', () => {
   const onToggle = jest.fn();
   const tree = render({tracking: false, onToggleTracking: onToggle});
-  expect(all(tree)).toContain('OFF');
+  expect(all(tree)).toContain('Tracking off');
   act(() => tree.root.findByProps({accessibilityRole: 'switch'}).props.onPress());
   expect(onToggle).toHaveBeenCalledTimes(1);
 });
@@ -71,16 +71,16 @@ test('the status list sets the status and returns to the page', () => {
   const item = tree.root.findAll((n: any) => n.props.accessibilityRole === 'radio' && texts(n).includes('Paused'))[0];
   act(() => item.props.onPress());
   expect(onSetStatus).toHaveBeenCalledWith('Paused');
-  expect(all(tree)).toContain('Tracking is');
+  expect(all(tree)).toContain('Tracking on');
 });
 
 test('the page follows the chosen edition for the same reading position', () => {
   const kindle = {...MOCK_BOOK, progress: 106 / 400, editionId: '33433135'};
-  expect(all(render({book: kindle}))).toContain('Page 76 of 288 · 26%');
+  expect(all(render({book: kindle}))).toContain('Page |76| of 288|26%');
 });
 
 test('Finished shows the last page of the chosen edition', () => {
-  expect(all(render({book: {...MOCK_BOOK, status: 'Finished'}}))).toContain('Page 330 of 330 · 100%');
+  expect(all(render({book: {...MOCK_BOOK, status: 'Finished'}}))).toContain('Page |330| of 330|100%');
 });
 
 test('the edition list hides audiobooks, and Use this edition saves the pick', () => {
@@ -121,9 +121,9 @@ test('an edition with no page count is not listed', () => {
   expect(t).toContain('2 editions without a page count hidden.');
 });
 
-test('the sync note is shown above the progress when given, and absent otherwise', () => {
-  expect(all(render({syncNote: 'Last sync: page 120'}))).toContain('Last sync: page 120');
-  expect(all(render({}))).not.toContain('Last sync');
+test('a sync problem is shown under the progress when given', () => {
+  expect(all(render({syncNote: 'Token rejected, tracking stopped'}))).toContain('Token rejected, tracking stopped');
+  expect(all(render({}))).not.toContain('tracking stopped');
 });
 
 test('tapping the cover opens it full size over the page; closing (button or anywhere) removes it', () => {
@@ -152,11 +152,11 @@ describe('reviews tab', () => {
     const onLoadReviews = jest.fn().mockResolvedValue({reviews: [rev(1, {supporter: true}), rev(2, {spoiler: true, text: 'SECRET'})], hasMore: false});
     const tree = render({onLoadReviews});
     expect(onLoadReviews).not.toHaveBeenCalled();
-    expect(all(tree)).toContain('About'); // default tab
+    expect(tree.root.findByProps({accessibilityLabel: 'Book info tab'}).props.accessibilityState.selected).toBe(true); // default tab
     press(tree, 'Reviews tab');
     expect(all(tree)).toContain('Loading reviews…');
     await flush();
-    press(tree, 'About tab');
+    press(tree, 'Book info tab');
     press(tree, 'Reviews tab');
     expect(onLoadReviews).toHaveBeenCalledTimes(1);
     const t = all(tree);
@@ -218,7 +218,7 @@ describe('journal tab', () => {
   test('lists notes and quotes with page, date, privacy and the split text', async () => {
     const t = all(await opened());
     expect(t).toContain('Quote');
-    expect(t).toContain('p. 83 · 2026-11-10 · Private');
+    expect(t).toContain('p. 83|2026-11-10|Private');
     expect(t).toContain('A passage');
     expect(t).toContain('my thoughts');
     expect(t).not.toContain('━');
@@ -255,7 +255,7 @@ describe('journal tab', () => {
     pressAt(tree, 'Remove');
     expect(all(tree)).toContain('This cannot be undone.');
     expect(onRemoveJournal).not.toHaveBeenCalled();
-    pressAt(tree, 'Remove entry');
+    pressAt(tree, 'Yes, remove');
     await flush();
     expect(all(tree)).toContain('boom');
     expect(all(tree)).toContain('A passage');
@@ -276,7 +276,7 @@ test('journal Load more offsets by rows left after a removal (the server deleted
   await flush();
   const at = (label: string) => act(() => tree.root.findAll((x: any) => x.props.accessibilityLabel === label && x.props.onPress)[0].props.onPress());
   at('Remove');
-  at('Remove entry');
+  at('Yes, remove');
   await flush();
   act(() => tree.root.findAll((x: any) => x.props.onPress && texts(x).includes('Load more'))[0].props.onPress());
   await flush();

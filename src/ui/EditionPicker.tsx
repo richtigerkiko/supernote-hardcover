@@ -1,7 +1,7 @@
 import React, {useState} from 'react';
 import {Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import type {Edition} from '../core/types';
-import {BLACK, WHITE, shared} from './theme';
+import {BLACK, WHITE, Button, TopBar, shared} from './theme';
 
 // Full-screen "Choose edition" list, shared by the detail page and the journal page. Same e-ink rules as DetailPage.
 
@@ -14,20 +14,10 @@ export const editionMatches = (e: Edition, query: string): boolean => {
   return query.toLowerCase().split(/\s+/).filter(Boolean).every(w => text.includes(w));
 };
 
-export function TopBar({title, onBack}: {title: string; onBack: () => void}) {
+// A radio row between hairlines; the caller makes the selected row's text bold.
+export function Item({on, onPress, tall, children}: {on: boolean; onPress: () => void; tall?: boolean; children: React.ReactNode}) {
   return (
-    <View style={styles.topBar}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Back" style={styles.close} onPress={onBack}>
-        <Text style={styles.closeText}>←</Text>
-      </Pressable>
-      <Text style={styles.title}>{title}</Text>
-    </View>
-  );
-}
-
-export function Item({on, onPress, children}: {on: boolean; onPress: () => void; children: React.ReactNode}) {
-  return (
-    <Pressable accessibilityRole="radio" accessibilityState={{checked: on}} style={[styles.item, on && styles.itemOn]} onPress={onPress}>
+    <Pressable accessibilityRole="radio" accessibilityState={{checked: on}} style={[styles.item, tall && {minHeight: 84}]} onPress={onPress}>
       <View style={styles.radio}>{on ? <View style={styles.radioDot} /> : null}</View>
       <View style={styles.itemText}>{children}</View>
     </Pressable>
@@ -48,65 +38,60 @@ export default function EditionPicker({editions, editionId, onPick, onClose}: Pr
   const [query, setQuery] = useState('');
   const found = shown.filter(e => editionMatches(e, query));
   return (
-    <View style={styles.page}>
-      <TopBar title="Choose edition" onBack={onClose} />
-      <TextInput
-        style={styles.search}
-        value={query}
-        onChangeText={setQuery}
-        placeholder={`Search ${shown.length} editions`}
-        placeholderTextColor={BLACK}
-        autoCapitalize="none"
-        autoCorrect={false}
-        returnKeyType="search"
-      />
-      <ScrollView keyboardShouldPersistTaps="handled">
+    <View style={shared.page}>
+      <TopBar title="Choose edition" onPress={onClose} />
+      <View style={styles.head}>
+        <TextInput
+          style={styles.search}
+          value={query}
+          onChangeText={setQuery}
+          accessibilityLabel="Search editions"
+          placeholder={`Search ${shown.length} editions`}
+          placeholderTextColor={BLACK}
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="search"
+        />
         <Text style={styles.pickNote}>
           {`Pick the edition this file is. Page counts and progress follow it.${hidden ? ` ${hidden} edition${hidden > 1 ? 's' : ''} without a page count hidden.` : ''}`}
         </Text>
-        {found.length === 0 ? <Text style={styles.pickNote}>No edition matches</Text> : null}
+      </View>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.list}>
+        {found.length === 0 ? <Text style={styles.none}>{`No edition matches “${query}”.`}</Text> : null}
         {found.map(e => (
-          <Item key={e.id} on={e.id === choice} onPress={() => setChoice(e.id)}>
-            <Text style={styles.l1}>{edLine1(e)}</Text>
-            <Text style={styles.l2}>{edLine2(e)}</Text>
-            {e.isbn ? <Text style={styles.l2}>{`ISBN ${e.isbn}`}</Text> : null}
+          <Item key={e.id} tall on={e.id === choice} onPress={() => setChoice(e.id)}>
+            <Text style={[styles.l1, e.id === choice && shared.bold]} numberOfLines={1}>
+              {edLine1(e)}
+            </Text>
+            <Text style={styles.l2}>{`${edLine2(e)}${e.isbn ? ` · ISBN ${e.isbn}` : ''}`}</Text>
           </Item>
         ))}
       </ScrollView>
-      <View style={styles.actions}>
-        <Pressable accessibilityRole="button" style={styles.action} onPress={onClose}>
-          <Text style={styles.actionText}>Cancel</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          style={styles.action}
+      <View style={shared.actions}>
+        <Button label="Cancel" onPress={onClose} />
+        <Button
+          label="Use this edition"
+          solid
           onPress={() => {
             onPick(choice);
             onClose();
-          }}>
-          <Text style={styles.actionText}>Use this edition</Text>
-        </Pressable>
+          }}
+        />
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  page: {flex: 1, backgroundColor: WHITE},
-  topBar: shared.topBar,
-  close: shared.close,
-  closeText: shared.closeText,
-  title: {fontSize: 20, color: BLACK, marginRight: 12},
-  l1: {fontSize: 21, fontWeight: '700', color: BLACK},
-  l2: {fontSize: 19, color: BLACK},
-  actions: shared.actions,
-  action: shared.action,
-  actionText: shared.actionText,
-  search: {fontSize: 21, color: BLACK, height: 60, marginHorizontal: 16, marginVertical: 10, paddingHorizontal: 14, borderWidth: 3, borderColor: BLACK},
-  pickNote: {fontSize: 19, lineHeight: 25, paddingVertical: 14, paddingHorizontal: 24, borderBottomWidth: 2, borderColor: BLACK, color: BLACK},
-  item: {flexDirection: 'row', alignItems: 'center', minHeight: 88, paddingVertical: 10, paddingHorizontal: 24, borderBottomWidth: 2, borderColor: BLACK, backgroundColor: WHITE},
-  itemOn: {borderLeftWidth: 8, paddingLeft: 16},
+  head: {paddingTop: 12, paddingHorizontal: 32}, // clears the host's home button, like shared.body
+  search: {fontSize: 21, color: BLACK, height: 56, paddingHorizontal: 24, borderWidth: 1.5, borderColor: BLACK, borderRadius: 28},
+  pickNote: {fontSize: 18, lineHeight: 25, marginTop: 14, paddingBottom: 14, color: BLACK, ...shared.hair},
+  list: {paddingHorizontal: 32},
+  none: {fontSize: 21, color: BLACK, paddingVertical: 28},
+  l1: {fontSize: 21, fontWeight: '500', color: BLACK},
+  l2: {fontSize: 18, lineHeight: 26, color: BLACK},
+  item: {flexDirection: 'row', alignItems: 'center', gap: 18, minHeight: 76, paddingVertical: 10, backgroundColor: WHITE, ...shared.hair},
   itemText: {flex: 1},
-  radio: {width: 30, height: 30, marginRight: 18, borderWidth: 3, borderColor: BLACK, borderRadius: 15, alignItems: 'center', justifyContent: 'center'},
+  radio: {width: 28, height: 28, borderWidth: 2, borderColor: BLACK, borderRadius: 14, alignItems: 'center', justifyContent: 'center'},
   radioDot: {width: 14, height: 14, borderRadius: 7, backgroundColor: BLACK},
 });
