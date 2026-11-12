@@ -251,7 +251,7 @@ export const JOURNAL_PAGE = 100; // the server's cap per request
 // The table also holds events the server writes (progress, status, rating...): only note and quote are the reader's own.
 // shortcut: field names come from docs/hardcover-api (guides/updatingreadingjournal.md), not yet run against the live API.
 const JOURNAL_QUERY = `query BookJournal($userId: Int!, $bookId: Int!, $limit: Int!, $offset: Int!) {
-  reading_journals(where: {user_id: {_eq: $userId}, book_id: {_eq: $bookId}, event: {_in: ["note", "quote"]}}, order_by: {action_at: desc}, limit: $limit, offset: $offset) {
+  reading_journals(where: {user_id: {_eq: $userId}, book_id: {_eq: $bookId}, event: {_in: ["note", "quote"]}}, order_by: [{action_at: desc}, {id: desc}], limit: $limit, offset: $offset) {
     id event entry action_at privacy_setting_id metadata
   }
 }`;
