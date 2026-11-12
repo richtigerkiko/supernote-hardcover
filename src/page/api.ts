@@ -1,6 +1,6 @@
 import type {OAuthSession} from '@hardcover/sdk/oauth';
 import {isbnsIn} from '../core/match';
-import {journalEntry, journalPosition} from '../core/journal';
+import {joinEntry, journalEntry, journalPosition, splitEntry} from '../core/journal';
 import type {BookDetail, Grants, ReadingItem, Sample} from '../core/types';
 import {log, withTimeout} from '../core/util';
 import {hasScope, SCOPES} from '../hardcover/auth';
@@ -184,6 +184,27 @@ export function createApi({auth, hc, meta, library, tracking, grants, dialog, se
       const c = needBook();
       await grants.need();
       return hc.fetchReviews(auth, c.item.bookId, offset);
+    },
+    // The reader's own notes and quotes for the loaded book. Without read:journal the list cannot be read: ask for a new sign-in.
+    async loadJournal(offset) {
+      const c = needBook();
+      if (!(await ensureScope('read:journal', 'The journal'))) {
+        session.opened(); // reload shows Sign in
+        throw new Error('The journal needs a new sign-in.');
+      }
+      await grants.need();
+      return hc.fetchJournal(auth, c.item.bookId, offset);
+    },
+    // A quote's passage is kept as stored; only the thoughts (or a note's text) change. Returns the whole new entry.
+    async editJournal(item, text, privacy) {
+      const entry = item.event === 'note' ? joinEntry('', text) : joinEntry(splitEntry('quote', item.entry).passage, text);
+      await grants.need();
+      await hc.updateJournal(auth, item.id, {entry, privacy});
+      return entry;
+    },
+    async removeJournal(id) {
+      await grants.need();
+      await hc.deleteJournal(auth, id);
     },
   };
 }
