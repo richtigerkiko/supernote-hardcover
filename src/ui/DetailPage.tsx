@@ -222,7 +222,8 @@ function JournalEdit({item, book, onSave, onClose}: {item: JournalItem; book: Bo
       <TopBar title={quote ? 'Edit quote' : 'Edit note'} onPress={onClose} />
       <ScrollView style={styles.flex} keyboardShouldPersistTaps="handled" contentContainerStyle={[shared.body, styles.editBody]}>
         {passage ? (
-          <View>
+          // as wide as the quote (or the source line, if that is longer), so the source sits right-justified under the quote itself
+          <View style={styles.quoteBlock}>
             <Text style={[shared.quote, styles.bigQuote]}>{passage}</Text>
             <Text style={styles.source}>{`— ${join([book.title, book.authors.join(', '), item.page ? `p. ${item.page}` : ''])}`}</Text>
           </View>
@@ -567,6 +568,7 @@ const styles = StyleSheet.create({
   confirm: {paddingTop: 12, paddingBottom: 10},
   confirmButtons: {flexDirection: 'row', gap: 12, marginTop: 12},
   editBody: {gap: 20},
+  quoteBlock: {alignSelf: 'flex-start', maxWidth: '100%'},
   bigQuote: {fontSize: 28, lineHeight: 41},
   source: {fontSize: 18, color: BLACK, textAlign: 'right', marginTop: 14},
   editInput: {height: 186, marginTop: 10},
