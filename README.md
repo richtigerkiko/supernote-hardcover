@@ -64,6 +64,7 @@ To update, install a newer package the same way. To remove the plugin, use **Uni
 - **"Could not read this EPUB's title and author."** The file has no usable metadata. Fix it with Calibre and copy the file again.
 - **"Hardcover has no edition with a page count for this book."** Progress needs a page count. Add one to an edition on hardcover.app.
 - **"Set the book to Currently reading to track it."** Tracking is on, but the book has another status on Hardcover, so nothing is sent. Change the status on the book's page.
+- **"No read in progress: set another status, then Currently reading."** The book is Currently reading on Hardcover but has no open read (an imported book, or one whose read was finished by hand). Changing the status away and back starts one.
 - **"Signed out, tracking stopped"**, or a message that the sign-in has expired: open Plugins > Hardcover and sign in again, then check that Tracking is still on.
 - **"This version needs a new sign-in with more access."** A newer version uses more of Hardcover's API than you approved earlier. Sign in again.
 - **Nothing arrives on Hardcover.** Check Wi-Fi, that Tracking is on for this book, and the line under the progress bar on the book page.

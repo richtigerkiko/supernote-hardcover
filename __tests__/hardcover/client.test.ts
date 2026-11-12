@@ -1,4 +1,4 @@
-import {NOT_READING, type ReadingItem} from '../../src/core/types';
+import {NO_READ, NOT_READING, type ReadingItem} from '../../src/core/types';
 import {fetchUserBook, fetchUserBookForBook, bookIdsForIsbns, fetchBookDetail, fetchUserBooks, saveProgress, saveJournal, saveReview, fetchReview, setStatus} from '../../src/hardcover/client';
 
 // The SDK is the transport; these tests check what we send it and how we map what it returns.
@@ -95,12 +95,12 @@ test('saveProgress sends only the page and the edition to the read in progress',
 });
 
 test.each([
-  ['Want to Read', {statusId: 1}],
-  ['Read', {statusId: 3}],
-  ['no read', {read: null}],
-  ['a finished read', {read: {...ITEM.read!, finished_at: '2026-10-01'}}],
-])('saveProgress writes nothing and says why for %s', async (_name, over) => {
-  await expect(saveProgress('T', {...ITEM, ...over}, 120)).rejects.toThrow(NOT_READING);
+  ['Want to Read', {statusId: 1}, NOT_READING],
+  ['Read', {statusId: 3}, NOT_READING],
+  ['Currently Reading with no read', {read: null}, NO_READ],
+  ['Currently Reading with a finished read', {read: {...ITEM.read!, finished_at: '2026-10-01'}}, NO_READ],
+])('saveProgress writes nothing and says why for %s', async (_name, over, why) => {
+  await expect(saveProgress('T', {...ITEM, ...over}, 120)).rejects.toThrow(why);
   expect(mockSdk.request).not.toHaveBeenCalled();
 });
 

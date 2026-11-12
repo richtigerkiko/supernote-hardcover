@@ -10,7 +10,7 @@ import {
   type TokenSource,
   type UserBookStatus,
 } from '@hardcover/sdk';
-import {NOT_READING, type CatalogueBook, type JournalItem, type Privacy, type PublicReview, type ReadingItem} from '../core/types';
+import {notTracked, type CatalogueBook, type JournalItem, type Privacy, type PublicReview, type ReadingItem} from '../core/types';
 
 // One client per credential. `auth` is a plain token (tests) or an OAuth session that refreshes itself and replays a
 // 401 once. pace: false because the SDK would wait with setTimeout, which the host only runs in lifecycle state 2 (see
@@ -138,7 +138,7 @@ export async function bookIdsForIsbns(auth: Auth, isbns: string[]): Promise<numb
 
 // Progress follows the documented read lifecycle (docs/hardcover-api guides/updatingabooksprogress.md, checked live
 // 2026-11-12), like the KOReader plugin:
-//  - only a book that is Currently Reading with a read in progress is written; anything else throws NOT_READING. A page
+//  - only a book that is Currently Reading with a read in progress is written; anything else throws why (notTracked). A page
 //    turn never changes a status and never starts a read: the status picker does (the server starts the read).
 //  - update_user_book_read changes only the fields it is sent, so only the page and the file's edition go out.
 //  - progress that reaches the end of the edition would finish the read and mark the book Read, so the last page is sent
@@ -147,7 +147,8 @@ export async function bookIdsForIsbns(auth: Auth, isbns: string[]): Promise<numb
 export async function saveProgress(auth: Auth, item: ReadingItem, pages: number): Promise<void> {
   if (!(pages > 0)) throw new Error('refusing to save: no page count');
   const read = item.read;
-  if (item.statusId !== 2 || !read || read.finished_at) throw new Error(NOT_READING);
+  const why = notTracked(item);
+  if (why || !read) throw new Error(why);
   const progress_pages = Math.min(pages, (item.editionPages ?? Infinity) - 1);
   if (progress_pages < 1) return; // an edition with one page: any progress would finish it
   const edition = read.edition_id ?? item.editionId;

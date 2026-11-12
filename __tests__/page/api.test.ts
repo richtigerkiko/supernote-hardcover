@@ -2,7 +2,7 @@ import {createApi} from '../../src/page/api';
 import {createLibrary} from '../../src/page/library';
 import {createMeta} from '../../src/page/meta';
 import {SCOPES} from '../../src/hardcover/auth';
-import {NOT_READING, type ReadingItem} from '../../src/core/types';
+import {NO_READ, NOT_READING, type ReadingItem} from '../../src/core/types';
 
 const PATH = '/b.epub';
 const item = (over: Partial<ReadingItem> = {}): ReadingItem => ({
@@ -198,7 +198,7 @@ describe('one edition per file', () => {
       return toggled;
     };
     expect(await sync({statusId: 1, read})).toBe(NOT_READING);
-    expect(await sync({statusId: 2, read: null})).toBe(NOT_READING);
+    expect(await sync({statusId: 2, read: null})).toBe(NO_READ);
     expect(await sync({statusId: 2, read})).toBe('');
   });
 

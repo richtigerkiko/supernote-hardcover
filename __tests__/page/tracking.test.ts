@@ -1,6 +1,6 @@
 import {createTracking} from '../../src/page/tracking';
 import type {FileMeta} from '../../src/core/store';
-import {NOT_READING} from '../../src/core/types';
+import {NO_READ, NOT_READING} from '../../src/core/types';
 
 const PATH = '/b.epub';
 const flush = () => new Promise<void>(r => setTimeout(r, 0));
@@ -54,6 +54,14 @@ test('a book that is not Currently Reading is not pushed: the sync line says why
   expect(t.grants.revoke).not.toHaveBeenCalled();
   t.tr.tracker.forget(PATH); // what the status picker does
   expect(t.tr.syncNote(PATH)).toBe('');
+  t.hc.saveProgress.mockRejectedValue(new Error(NO_READ));
+  t.tr.onTouch();
+  await flush();
+  t.goTo(60);
+  t.tr.onTouch();
+  await flush();
+  expect(t.tr.syncNote(PATH)).toBe(NO_READ);
+  expect(t.grants.revoke).not.toHaveBeenCalled();
 });
 
 test('an entry from before the saved ids is looked up once and the ids go into the cached object', async () => {

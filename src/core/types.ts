@@ -44,8 +44,12 @@ export interface PublicReview {
   date: string; // YYYY-MM-DD
 }
 
-// Why a tracked book is not pushed: progress only goes to a Currently Reading book with a read in progress.
+// Why a tracked book is not pushed ('' when it is): progress only goes to a Currently Reading book with a read in progress.
+// A book can be Currently Reading without one (imported, or its read finished by hand); only a change to that status starts one.
 export const NOT_READING = 'Set the book to Currently reading to track it';
+export const NO_READ = 'No read in progress: set another status, then Currently reading';
+export const notTracked = (item: Pick<ReadingItem, 'statusId' | 'read'>): string =>
+  item.statusId !== 2 ? NOT_READING : !item.read || item.read.finished_at ? NO_READ : '';
 
 // The labels of the status list on the detail page (src/page/detail.ts maps them to Hardcover's status ids).
 export const STATUSES = ['Want to read', 'Currently reading', 'Paused', 'Did not finish', 'Finished'] as const;
