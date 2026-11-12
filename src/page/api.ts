@@ -240,6 +240,15 @@ export function createApi({auth, hc, meta, library, tracking, grants, dialog, se
       await grants.need();
       return hc.fetchReviews(auth, c.item.bookId, offset);
     },
+    // Sign-ins stored before write:social was asked for cannot like: offer a new sign-in instead of an error from the server.
+    async likeReview(id, on) {
+      if (!(await ensureScope('write:social', 'Liking reviews'))) {
+        session.opened(); // reload shows Sign in
+        throw new Error('Liking reviews needs a new sign-in.');
+      }
+      await grants.need();
+      return hc.setLike(auth, id, on);
+    },
     // The reader's own notes and quotes for the loaded book. Without read:journal the list cannot be read: ask for a new sign-in.
     async loadJournal(offset) {
       const c = needBook();

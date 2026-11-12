@@ -54,9 +54,9 @@ export const MOCK_LONG: BookDetail = {
 // Mock reviews for the emulator preview (shape of hardcover.fetchReviews).
 const LONG_REVIEW = 'A bold, strange and often brutal retelling. '.repeat(30).trim();
 export const MOCK_REVIEWS = [
-  {id: 1, user: 'Marlene', supporter: true, rating: 4.5, text: LONG_REVIEW, spoiler: false, date: '2026-10-02'},
-  {id: 2, user: 'Tobias', supporter: false, rating: 3, text: 'Short and sharp.', spoiler: false, date: '2026-09-18'},
-  {id: 3, user: 'A reader with a very long display name indeed', supporter: false, rating: null, text: 'The ending ruined it for me.', spoiler: true, date: '2026-09-01'},
+  {id: 1, user: 'Marlene', supporter: true, rating: 4.5, text: LONG_REVIEW, spoiler: false, date: '2026-10-02', likes: 12, liked: false},
+  {id: 2, user: 'Tobias', supporter: false, rating: 3, text: 'Short and sharp.', spoiler: false, date: '2026-09-18', likes: 0, liked: false},
+  {id: 3, user: 'A reader with a very long display name indeed', supporter: false, rating: null, text: 'The ending ruined it for me.', spoiler: true, date: '2026-09-01', likes: 3, liked: false},
 ];
 
 // Mock journal for the emulator preview (shape of hardcover.fetchJournal).

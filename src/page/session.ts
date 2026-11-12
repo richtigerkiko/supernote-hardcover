@@ -30,6 +30,8 @@ export interface SessionApi {
   writeReview(): Promise<Review | false>;
   saveReview(review: Review): Promise<void>;
   loadReviews(offset: number): Promise<{reviews: PublicReview[]; hasMore: boolean}>;
+  /** Likes a review (on: true) or takes the like back; resolves with its new like count. Without write:social it asks for a new sign-in and rejects. */
+  likeReview(id: number, on: boolean): Promise<number>;
   /** This book's notes and quotes, newest first, 100 at a time. */
   loadJournal(offset: number): Promise<{entries: JournalItem[]; hasMore: boolean}>;
   /** Saves the new thoughts (quote) or text (note) and privacy; resolves with the whole new entry text. */

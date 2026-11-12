@@ -42,6 +42,8 @@ export interface PublicReview {
   text: string;
   spoiler: boolean;
   date: string; // YYYY-MM-DD
+  likes: number;
+  liked: boolean; // by the signed-in reader
 }
 
 // Why a tracked book is not pushed ('' when it is): progress only goes to a Currently Reading book with a read in progress.

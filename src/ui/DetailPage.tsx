@@ -23,6 +23,7 @@ type Props = {
   onSetEdition: (editionId: string) => void;
   onAddToLibrary?: () => void; // only used when book.inLibrary is false
   onLoadReviews?: (offset: number) => Promise<{reviews: PublicReview[]; hasMore: boolean}>; // 10 at a time, first call on first open of the Reviews tab
+  onLikeReview?: (id: number, on: boolean) => Promise<number>; // likes (on) or unlikes a review, resolves with its new like count
   onLoadJournal?: (offset: number) => Promise<{entries: JournalItem[]; hasMore: boolean}>; // 100 at a time, first call on first open of the Journal tab
   onEditJournal?: (item: JournalItem, text: string, privacy: Privacy) => Promise<string>; // resolves with the whole new entry text
   onRemoveJournal?: (id: number) => Promise<void>;
@@ -111,8 +112,29 @@ function Progress({page, total}: {page: number; total: number}) {
   );
 }
 
-// Name, stars and date on one line, then the badges: an italic line in the list, grey pills on the full view.
-function ReviewHead({r, full}: {r: PublicReview; full?: boolean}) {
+type OnLike = (r: PublicReview) => Promise<void>;
+
+// Heart and count: outline when not liked, filled and bold when liked. A tap sends the opposite; off while that is in flight.
+function Like({r, onLike}: {r: PublicReview; onLike: OnLike}) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${r.liked ? 'Unlike' : 'Like'} ${r.user}'s review`}
+      accessibilityState={{selected: r.liked, disabled: busy}}
+      disabled={busy}
+      style={styles.like}
+      onPress={() => {
+        setBusy(true);
+        onLike(r).finally(() => setBusy(false));
+      }}>
+      <Text style={[styles.likeText, r.liked && shared.bold]}>{`${r.liked ? '♥' : '♡'} ${r.likes}`}</Text>
+    </Pressable>
+  );
+}
+
+// Name, stars, date and the like control on one line, then the badges: an italic line in the list, grey pills on the full view.
+function ReviewHead({r, full, onLike}: {r: PublicReview; full?: boolean; onLike?: OnLike}) {
   const badges = [r.supporter ? 'Supporter' : '', r.spoiler ? 'Contains spoilers' : ''].filter(Boolean);
   return (
     <>
@@ -122,6 +144,7 @@ function ReviewHead({r, full}: {r: PublicReview; full?: boolean}) {
         </Text>
         {r.rating ? <Text style={[styles.rvStars, full && {fontSize: 21}]}>{halfStars(r.rating)}</Text> : null}
         <Text style={styles.rvDate}>{r.date}</Text>
+        {onLike ? <Like r={r} onLike={onLike} /> : null}
       </View>
       {!badges.length ? null : full ? (
         <View style={styles.badges}>
@@ -136,11 +159,11 @@ function ReviewHead({r, full}: {r: PublicReview; full?: boolean}) {
   );
 }
 
-function ReviewEntry({r, onMore}: {r: PublicReview; onMore: () => void}) {
+function ReviewEntry({r, onMore, onLike}: {r: PublicReview; onMore: () => void; onLike?: OnLike}) {
   const [long, setLong] = useState(false);
   return (
     <View style={styles.rv}>
-      <ReviewHead r={r} />
+      <ReviewHead r={r} onLike={onLike} />
       {r.spoiler ? null : (
         <Text style={[shared.serif, styles.rvText]} numberOfLines={2} onTextLayout={e => setLong(e.nativeEvent.lines.length > 2)}>
           {r.text}
@@ -259,7 +282,7 @@ function JournalEdit({item, book, onSave, onClose}: {item: JournalItem; book: Bo
 type Journal = {items: JournalItem[]; hasMore: boolean; loaded: boolean; state: 'idle' | 'loading' | 'error'};
 const NO_JOURNAL: Journal = {items: [], hasMore: false, loaded: false, state: 'idle'};
 
-export default function DetailPage({book, tracking, syncNote, onToggleTracking, onClose, onWriteReview, onSetStatus, onSetEdition, onAddToLibrary, onLoadReviews, onLoadJournal, onEditJournal, onRemoveJournal}: Props) {
+export default function DetailPage({book, tracking, syncNote, onToggleTracking, onClose, onWriteReview, onSetStatus, onSetEdition, onAddToLibrary, onLoadReviews, onLikeReview, onLoadJournal, onEditJournal, onRemoveJournal}: Props) {
   const inLibrary = book.inLibrary !== false;
   const [view, setView] = useState<'detail' | 'status' | 'editions' | 'cover'>('detail');
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -286,6 +309,17 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
       () => setRv(r => ({...r, state: 'error'})),
     );
   };
+  // The list and the open review each hold the review, so both get the server's count. A failure changes nothing.
+  const like =
+    onLikeReview &&
+    (async (r: PublicReview) => {
+      const on = !r.liked;
+      const likes = await onLikeReview(r.id, on).catch(() => null);
+      if (likes == null) return;
+      const set = (x: PublicReview) => (x.id === r.id ? {...x, likes, liked: on} : x);
+      setRv(v => ({...v, items: v.items.map(set)}));
+      setOpenReview(o => o && set(o));
+    });
   const showReviews = () => {
     setTab('reviews');
     if (!rv.loaded && rv.state === 'idle') loadReviews();
@@ -404,7 +438,7 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
         {tab === 'reviews' ? (
           <View>
             {rv.items.map(r => (
-              <ReviewEntry key={r.id} r={r} onMore={() => setOpenReview(r)} />
+              <ReviewEntry key={r.id} r={r} onMore={() => setOpenReview(r)} onLike={like} />
             ))}
             {rv.state === 'loading' ? <Text style={styles.status}>{rv.items.length ? 'Loading more…' : 'Loading reviews…'}</Text> : null}
             {rv.state === 'error' ? (
@@ -476,7 +510,7 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
           <TopBar title="Review" onPress={() => setOpenReview(null)} />
           <ScrollView style={styles.flex} contentContainerStyle={shared.body}>
             <Text style={[styles.small, {marginBottom: 18}]}>{join([book.title, book.authors.join(', ')])}</Text>
-            <ReviewHead r={openReview} full />
+            <ReviewHead r={openReview} full onLike={like} />
             <View style={styles.rvFull}>
               <Text style={shared.serif}>{openReview.text}</Text>
             </View>
@@ -559,6 +593,8 @@ const styles = StyleSheet.create({
   rvName: {fontSize: 21, fontWeight: '700', color: BLACK, flexShrink: 1},
   rvStars: {fontSize: 19, letterSpacing: 1, color: BLACK},
   rvDate: {fontSize: 18, color: BLACK, marginLeft: 'auto'},
+  like: {minWidth: 56, minHeight: 48, alignSelf: 'center', alignItems: 'flex-end', justifyContent: 'center'},
+  likeText: {fontSize: 21, color: BLACK},
   rvBadges: {fontSize: 18, fontStyle: 'italic', color: BLACK},
   badges: {flexDirection: 'row', gap: 8, marginTop: 8},
   rvText: {marginTop: 6},
