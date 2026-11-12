@@ -15,7 +15,7 @@ export type LoadResult = {message: string; signIn?: boolean} | {book: PageBook; 
 export interface SessionApi {
   load(): Promise<LoadResult>;
   signIn(onCode: (uri: string, code: string, qr: string) => void): Promise<boolean>;
-  setTracking(on: boolean): Promise<string>; // the new sync line
+  setTracking(on: boolean): Promise<{sync: string; status?: 'Currently reading'}>; // the new sync line, and the status if the offer changed it
   setEdition(editionId: string): Promise<void>;
   passage(): Promise<string>;
   saveJournal(entry: Entry): Promise<void>;

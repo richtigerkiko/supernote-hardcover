@@ -103,7 +103,10 @@ function AppInner(): React.JSX.Element {
     const on = !tracking;
     setTracking(on);
     session.api?.setTracking(on).then(
-      s => setSyncNote(s),
+      r => {
+        setSyncNote(r.sync);
+        if (r.status) setBook(b => (b ? {...b, status: r.status!} : b));
+      },
       (e: any) => {
         setTracking(!on);
         setSyncNote(`Could not turn tracking ${on ? 'on' : 'off'}: ${msg(e)}`);
