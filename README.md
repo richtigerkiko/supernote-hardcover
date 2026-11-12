@@ -44,7 +44,7 @@ To update, install a newer package the same way. To remove the plugin, use **Uni
 
 ## Usage
 
-**Tracking.** Tracking is per book and starts off. Once it is on, you don't need to press anything: progress follows your page turns. **Plugins > Hardcover** opens the book's page with the current progress; if a sync failed, the reason is shown under the progress bar.
+**Tracking.** Tracking is per book and starts off. Once it is on, you don't need to press anything: progress follows your page turns. Progress is only sent for a book whose status is Currently reading; set it with the status button on the book's page. Reaching the last page does not mark the book as finished: pick Finished yourself. **Plugins > Hardcover** opens the book's page with the current progress; if a sync failed, the reason is shown under the progress bar.
 
 **Books not in your library.** If the open book is not in your Hardcover library, the plugin looks it up in the Hardcover catalogue and asks once whether to add it (as Want to Read, with your copy marked as owned). If you say no, the book page and the journal still work, and an **Add to library** button replaces tracking and status.
 
@@ -63,6 +63,7 @@ To update, install a newer package the same way. To remove the plugin, use **Uni
 - **"This book is not in your Hardcover library."** Hardcover's catalogue has no match for the title, author or ISBN in the file. Check the EPUB's metadata (for example with Calibre), or add the book on hardcover.app first.
 - **"Could not read this EPUB's title and author."** The file has no usable metadata. Fix it with Calibre and copy the file again.
 - **"Hardcover has no edition with a page count for this book."** Progress needs a page count. Add one to an edition on hardcover.app.
+- **"Set the book to Currently reading to track it."** Tracking is on, but the book has another status on Hardcover, so nothing is sent. Change the status on the book's page.
 - **"Signed out, tracking stopped"**, or a message that the sign-in has expired: open Plugins > Hardcover and sign in again, then check that Tracking is still on.
 - **"This version needs a new sign-in with more access."** A newer version uses more of Hardcover's API than you approved earlier. Sign in again.
 - **Nothing arrives on Hardcover.** Check Wi-Fi, that Tracking is on for this book, and the line under the progress bar on the book page.
