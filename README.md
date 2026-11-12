@@ -29,13 +29,13 @@ A Supernote plugin that keeps your [Hardcover](https://hardcover.app) reading pr
 1. Download `supernote-hardcover.snplg` from the [latest release](https://github.com/richtigerkiko/supernote-hardcover/releases/latest).
 2. Copy it into the `MyStyle` folder on your Supernote.
 3. On the Supernote: **Settings > Apps > Plugins > Select Plugin Package**, select the file, tap **Install**.
-4. Open an EPUB, tap the **Plugins** icon (puzzle piece) in the toolbar and choose **Hardcover**.
+4. Open an EPUB, tap the **Plugins** icon (puzzle piece) in the toolbar and choose **Hardcover**. Allow file and internet access if asked.
 5. Tap **Sign in** and scan the QR code with your phone, or open the link shown and type the code.
 6. Switch **Tracking** on.
 
 ## Usage
 
-- **Tracking** is per book and off by default. Once on, progress follows your page turns. The book must be **Currently reading** on Hardcover; marking it finished is up to you.
+- **Tracking** is per book and off by default. Once on, progress follows your page turns. The book must be **Currently reading** on Hardcover. Reaching the last page does not mark it finished: set the status yourself.
 - **Edition:** tap **Change** to pick the edition you are reading. Page numbers follow it.
 - **Quotes and notes:** select text, then tap the Hardcover icon in the selection toolbar. Entries are private unless you choose otherwise, and can be edited or removed in the Journal tab.
 - **Status and review:** the two buttons at the bottom of the book page.
