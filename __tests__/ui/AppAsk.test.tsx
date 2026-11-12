@@ -41,6 +41,14 @@ test('{pick} with link (a PDF book that is not added): Use this edition only lin
   expect(api.load.mock.calls.length).toBeGreaterThan(1); // reloaded (the earlier test's page is still mounted and reloads too)
 });
 
+test('{pick} with link: a failed link says the edition could not be saved, not that the book could not be added', async () => {
+  const {tree, api} = await open({pick: {bookId: 5, editions: [edition], link: true}});
+  api.linkBook.mockRejectedValue(new Error('timeout: book details'));
+  await act(async () => button(tree, 'Use this edition').props.onPress());
+  const texts = tree.root.findAll((n: any) => typeof n.type === 'string' && n.type === 'Text').map((n: any) => n.children.join(''));
+  expect(texts).toContain('Could not save the edition: timeout: book details');
+});
+
 test('{pick}: Cancel closes the view and writes nothing', async () => {
   const {tree, api} = await open({pick: {bookId: 5, editions: [edition]}});
   act(() => button(tree, 'Cancel').props.onPress());
