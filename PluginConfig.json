@@ -2,7 +2,7 @@
     "pluginID":  "fy7xif74l3rkpo1x",
     "pluginKey":  "supernote-hardcover",
     "iconPath":  "assets/plugin-icon.png",
-    "desc":  "Sends your EPUB reading progress to Hardcover, with a book page, quotes and notes.",
+    "desc":  "Sends your EPUB and PDF reading progress to Hardcover, with a book page, quotes and notes.",
     "name":  "supernote-hardcover",
     "versionCode":  "29",
     "uses-permissions":  [

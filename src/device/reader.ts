@@ -18,7 +18,7 @@ export async function sample(): Promise<Sample | null> {
   const again = reply<string>(await PluginCommAPI.getCurrentFilePath());
   // a note, no document in front, or the screen asleep: the total (a DOC call) fails
   if (!p?.success || !pg?.success || !tot?.success || !again?.success || again.result !== p.result) return null;
-  if (!/\.epub$/i.test(p.result)) return null;
+  if (!/\.(epub|pdf)$/i.test(p.result)) return null;
   return {path: p.result, page: pg.result, total: tot.result};
 }
 

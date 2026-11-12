@@ -13,7 +13,7 @@ const apiBook = {
   editions: [{id: 1, editionFormat: 'Paperback', pages: 300, audioSeconds: null, publisher: null, language: null}],
 };
 
-function setup({list = [item()], scope = SCOPES.join(' '), dialogYes = true, sampled = true} = {}) {
+function setup({list = [item()], scope = SCOPES.join(' '), dialogYes = true, sampled = true, path = PATH} = {}) {
   const hc: any = {
     fetchUserBooks: jest.fn(async () => list),
     fetchUserBookForBook: jest.fn(async () => null),
@@ -25,6 +25,7 @@ function setup({list = [item()], scope = SCOPES.join(' '), dialogYes = true, sam
     fetchReview: jest.fn(async () => ({markdown: 'm', hasSpoilers: true, sponsored: true, notes: 'n', rating: 4})),
     saveReview: jest.fn(async () => {}),
     fetchReviews: jest.fn(async () => ({reviews: [], hasMore: false})),
+    setLike: jest.fn(async () => 3),
     setStatus: jest.fn(async () => {}),
     saveJournal: jest.fn(async () => {}),
     fetchJournal: jest.fn(async () => ({entries: [], hasMore: false})),
@@ -32,8 +33,9 @@ function setup({list = [item()], scope = SCOPES.join(' '), dialogYes = true, sam
     deleteJournal: jest.fn(async () => {}),
   };
   const store = new Map();
+  const read = jest.fn(async () => ({title: 'Dune', creator: 'Frank Herbert', ids: []}));
   const meta = createMeta({
-    read: async () => ({title: 'Dune', creator: 'Frank Herbert', ids: []}),
+    read,
     cache: async () => ({get: async (p: string) => store.get(p) ?? null, set: async (p: string, m: any) => void store.set(p, m), tracked: async () => []}) as any,
   });
   const auth: any = {isSignedIn: jest.fn(async () => true), tokens: jest.fn(async () => ({scope})), signOut: jest.fn(async () => {})};
@@ -48,8 +50,8 @@ function setup({list = [item()], scope = SCOPES.join(' '), dialogYes = true, sam
   hc.fetchBookDetail.mockImplementation(async () => ({...apiBook, editions}));
   const grants: any = {need: jest.fn(async () => {})};
   const sess: any = {pending: null, selection: null, opened: jest.fn()};
-  const api = createApi({auth, hc, meta, library, tracking, grants, dialog, session: sess, sample: async () => (sampled ? {path: PATH, page: 149, total: 300} : null)});
-  return {api, hc, auth, dialog, tracking, store, sess};
+  const api = createApi({auth, hc, meta, library, tracking, grants, dialog, session: sess, sample: async () => (sampled ? {path, page: 149, total: 300} : null)});
+  return {api, hc, auth, dialog, tracking, store, sess, read};
 }
 
 describe('load', () => {
@@ -69,7 +71,7 @@ describe('load', () => {
 
   test('no sample: tells to open an EPUB', async () => {
     const {api} = setup({sampled: false});
-    expect(await api.load()).toEqual({message: expect.stringContaining('Open an EPUB')});
+    expect(await api.load()).toEqual({message: expect.stringContaining('Open an EPUB or PDF')});
   });
 
   const added = (t: ReturnType<typeof setup>, id: number, pages: number) =>
@@ -139,10 +141,45 @@ describe('load', () => {
     expect(t.store.get(PATH)?.linked).toBeUndefined();
   });
 
+  // #96: book 5 is a duplicate record with no page count, book 7 the real one.
+  const noPages = (t: ReturnType<typeof setup>) => {
+    const good = t.hc.fetchBookDetail.getMockImplementation()!;
+    t.hc.fetchBookDetail.mockImplementation(async (_a: unknown, bookId: number) =>
+      bookId === 5 ? {...apiBook, editions: [{id: 3, editionFormat: 'Kindle', pages: null, audioSeconds: null}]} : {...(await good()), title: 'Real'},
+    );
+    t.hc.fetchUserBookForBook.mockImplementation(async (_a: unknown, bookId: number) => (bookId === 5 ? item() : null));
+  };
+
+  test('a library entry whose book has no edition with pages opens the book search; the picked book stays after a reload', async () => {
+    const t = setup(); // the entry for book 5 is in the library and matches by title
+    noPages(t);
+    expect(await t.api.load()).toEqual({search: 'Dune Frank Herbert'});
+    await expect(t.api.pickBook(5)).rejects.toThrow('no edition with a page count'); // the dead record again, although it is in the library
+    expect(await t.api.pickBook(7)).toMatchObject({pick: {bookId: 7}});
+    t.hc.addOwned.mockImplementation(async () => (t.hc.fetchUserBookForBook.mockImplementation(async (_a: unknown, id: number) => item(id === 7 ? {userBookId: 10, bookId: 7} : {})), {id: 1, pages: 300}));
+    await t.api.addToLibrary({bookId: 7, editionId: '1'});
+    expect(t.store.get(PATH).linked).toEqual({bookId: 7, editionId: 1});
+
+    const r: any = await t.api.load(); // the entry for book 5 still matches by title: the link wins
+    expect(r.book).toMatchObject({title: 'Real', inLibrary: true});
+    expect(t.hc.fetchBookDetail).toHaveBeenLastCalledWith(t.auth, 7, expect.anything());
+    expect(t.hc.addOwned).toHaveBeenCalledTimes(1); // nothing was written to the entry for book 5
+    expect(t.hc.addOwned).toHaveBeenCalledWith(t.auth, 7, 1);
+    expect(t.hc.setStatus).not.toHaveBeenCalled();
+  });
+
+  test('a linked book with no edition with pages opens the book search too', async () => {
+    const t = setup({list: []});
+    noPages(t);
+    t.store.set(PATH, {title: 'Dune', creator: 'Frank Herbert', ids: [], linked: {bookId: 5, editionId: 3}});
+    expect(await t.api.load()).toEqual({search: 'Dune Frank Herbert'});
+    expect(await t.api.pickBook(7)).toMatchObject({pick: {bookId: 7}});
+  });
+
   test('an EPUB whose title cannot be read keeps its own message', async () => {
     const t = setup({list: []});
     t.store.set(PATH, {ids: [], failed: true});
-    expect(await t.api.load()).toEqual({message: "Could not read this EPUB's title and author."});
+    expect(await t.api.load()).toEqual({message: "Could not read this book's title and author."});
   });
 
   test('a No keeps the link: the page shows the book without library features', async () => {
@@ -151,6 +188,80 @@ describe('load', () => {
     expect(t.hc.addOwned).not.toHaveBeenCalled();
     expect(r.book.inLibrary).toBe(false);
     expect(t.store.get(PATH).linked).toEqual({bookId: 5});
+  });
+});
+
+// A PDF is never read or matched: the reader picks the book and the edition, both, before anything is saved.
+describe('a PDF', () => {
+  const PDF = '/Dune - Frank Herbert.pdf'; // a name that would match the library entry, if it were used
+  const noWrites = (t: ReturnType<typeof setup>) => {
+    expect(t.hc.addOwned).not.toHaveBeenCalled();
+    expect(t.hc.setStatus).not.toHaveBeenCalled();
+  };
+
+  test('opens the book search with an empty box: the file is not read and nothing is matched', async () => {
+    const t = setup({path: PDF}); // "Dune" is in the library
+    expect(await t.api.load()).toEqual({search: ''});
+    expect(t.read).not.toHaveBeenCalled();
+    expect(t.hc.searchBooks).not.toHaveBeenCalled();
+    expect(t.hc.editionsForIsbns).not.toHaveBeenCalled();
+    expect(t.dialog).not.toHaveBeenCalled();
+  });
+
+  test('a picked library book: no dialog, the edition picker, then only the link and the picked edition are saved', async () => {
+    const t = setup({path: PDF});
+    t.hc.fetchUserBookForBook.mockResolvedValue(item());
+    await t.api.load();
+    expect(await t.api.pickBook(5)).toMatchObject({pick: {bookId: 5, link: true}});
+    expect(t.dialog).not.toHaveBeenCalled();
+    expect(t.store.get(PDF)).toEqual({ids: []}); // a Cancel in the picker ends here: nothing saved
+
+    await t.api.linkBook({bookId: 5, editionId: '2'});
+    expect(t.store.get(PDF)).toMatchObject({linked: {bookId: 5, editionId: 2}, edition: {id: 2, pages: 350}});
+    expect(t.tracking.tracker.forget).toHaveBeenCalledWith(PDF);
+    const r: any = await t.api.load(); // the picked edition, not the library entry's (1)
+    expect(r.book).toMatchObject({inLibrary: true, editionId: '2', editionSaved: true});
+    expect(t.store.get(PDF).edition).toEqual({id: 2, pages: 350});
+    noWrites(t);
+  });
+
+  test('a pick answered with No: the edition picker, then only the link and the picked edition are saved', async () => {
+    const t = setup({path: PDF, list: [], dialogYes: false});
+    await t.api.load();
+    expect(await t.api.pickBook(5)).toMatchObject({pick: {bookId: 5, link: true}});
+    expect(t.dialog).toHaveBeenCalledTimes(1);
+    expect(t.store.get(PDF)).toEqual({ids: []});
+
+    await t.api.linkBook({bookId: 5, editionId: '2'});
+    expect(t.store.get(PDF)).toMatchObject({linked: {bookId: 5, editionId: 2}, edition: {id: 2, pages: 350}});
+    const r: any = await t.api.load();
+    expect(r.book).toMatchObject({inLibrary: false, editionId: '2'});
+    expect(t.dialog).toHaveBeenCalledTimes(1); // no second prompt
+    noWrites(t);
+  });
+
+  test('a pick answered with Yes is added with the picked edition', async () => {
+    const t = setup({path: PDF, list: []});
+    await t.api.load();
+    const ask: any = await t.api.pickBook(5);
+    expect(ask.pick.link).toBeUndefined();
+    t.hc.addOwned.mockImplementation(async () => (t.hc.fetchUserBookForBook.mockResolvedValue(item()), {id: 2, pages: 350}));
+    await t.api.addToLibrary({bookId: 5, editionId: '2'});
+    expect(t.hc.addOwned).toHaveBeenCalledWith(t.auth, 5, 2);
+    expect(((await t.api.load()) as any).book).toMatchObject({inLibrary: true, editionId: '2'});
+  });
+
+  test('an edition without pages is refused, and a saved edition that left the list is picked again instead of defaulted', async () => {
+    const t = setup({path: PDF, dialogYes: false, list: []});
+    await t.api.load();
+    await t.api.pickBook(5);
+    await expect(t.api.linkBook({bookId: 5, editionId: '3'})).rejects.toThrow('no page count');
+    expect(t.store.get(PDF)).toEqual({ids: []});
+
+    const u = setup({path: PDF, list: []});
+    u.store.set(PDF, {ids: [], linked: {bookId: 5, editionId: 8}, edition: {id: 8, pages: 100}});
+    expect(await u.api.load()).toMatchObject({pick: {bookId: 5, link: true}});
+    expect(u.store.get(PDF).edition).toEqual({id: 8, pages: 100}); // untouched until the pick
   });
 });
 
@@ -343,6 +454,22 @@ describe('review calls', () => {
     t.dialog.mockResolvedValue(false);
     await expect(t.api.writeReview()).rejects.toThrow('new sign-in');
     expect(t.auth.signOut).not.toHaveBeenCalled();
+  });
+
+  test('likeReview sends the like; a sign-in without write:social gets the new sign-in prompt instead', async () => {
+    const t = setup();
+    await t.api.load();
+    expect(await t.api.likeReview(42, true)).toBe(3);
+    expect(t.hc.setLike).toHaveBeenCalledWith(t.auth, 42, true);
+
+    const old = setup({scope: SCOPES.filter(x => x !== 'write:social').join(' '), dialogYes: false});
+    await old.api.load(); // "Later" to the load() prompt
+    old.dialog.mockResolvedValue(true);
+    await expect(old.api.likeReview(42, true)).rejects.toThrow('new sign-in');
+    expect(old.dialog).toHaveBeenLastCalledWith(expect.stringContaining('Liking reviews needs a new sign-in'), 'Cancel', 'Sign in', false);
+    expect(old.auth.signOut).toHaveBeenCalled();
+    expect(old.sess.opened).toHaveBeenCalled(); // reload shows Sign in
+    expect(old.hc.setLike).not.toHaveBeenCalled();
   });
 
   test('saveReview and loadReviews use the loaded book', async () => {

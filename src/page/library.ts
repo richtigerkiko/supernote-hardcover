@@ -2,7 +2,7 @@ import type {OAuthSession} from '@hardcover/sdk/oauth';
 import {catalogueBook, resolveBook} from '../core/resolve';
 import type {FileMeta} from '../core/store';
 import type {ReadingItem} from '../core/types';
-import {withTimeout} from '../core/util';
+import {isPdf, withTimeout} from '../core/util';
 import type * as client from '../hardcover/client';
 import {authorsOf, toEditions, withEdition} from './detail';
 import type {Meta} from './meta';
@@ -26,6 +26,7 @@ export type Client = Pick<
   | 'saveProgress'
   | 'saveReview'
   | 'searchBooks'
+  | 'setLike'
   | 'setStatus'
   | 'updateJournal'
 >;
@@ -34,6 +35,9 @@ export type Dialog = (tip: string, left: string, right: string, ok: boolean) => 
 type Link = {bookId: number; editionId?: number};
 
 const READING_TTL_MS = 600_000;
+
+// What the book search starts with: the EPUB's title and author (nothing for a PDF).
+export const searchText = (m: FileMeta) => [m.title, m.creator].filter(Boolean).join(' ');
 
 // The books in the library (cached) and which item a file is.
 export function createLibrary({auth, hc, meta, dialog}: {auth: OAuthSession; hc: Client; meta: Meta; dialog: Dialog}) {
@@ -88,22 +92,36 @@ export function createLibrary({auth, hc, meta, dialog}: {auth: OAuthSession; hc:
   async function link(path: string, to: Link): Promise<ReadingItem | Ask | null> {
     const m = await meta.get(path);
     const item = await entryFor(to.bookId); // on the shelves after all: nothing to ask or write
+    const book = await withTimeout(hc.fetchBookDetail(auth, to.bookId), 20_000, 'book details');
+    const editions = toEditions(book);
+    if (!to.editionId && !editions.some(e => !e.audio && e.pages > 0)) return null; // also for a library entry: load() would only reopen the search
     if (!item) {
-      const book = await withTimeout(hc.fetchBookDetail(auth, to.bookId), 20_000, 'book details');
-      const editions = toEditions(book);
       const by = authorsOf(book).slice(0, 2).join(', '); // the rest are mostly translators
-      if (!to.editionId && !editions.some(e => !e.audio && e.pages > 0)) return null;
       if (await dialog(`"${book.title}"${by ? ` by ${by}` : ''} is not in your Hardcover library. Add it as Want to Read and mark your copy as owned?`, 'No', 'Yes', false)) {
         if (!to.editionId) return {pick: {bookId: to.bookId, editions}};
         return (await addToLibrary(path, m, {bookId: to.bookId, editionId: to.editionId})) ?? stub(to);
       }
     }
+    // A PDF gets no default edition: the reader picks one, and only then are link and edition saved (linkEdition).
+    if (isPdf(path)) return {pick: {bookId: to.bookId, editions, link: true}};
     m.linked = to;
     await meta.save(path, m);
     return withEdition(item ?? stub(to), m.edition)!;
   }
 
-  // A book that the library match did not find: the saved link, else the whole catalogue (catalogueBook), else the book
+  // The book and the edition picked for a PDF whose book is not added (in the library already, or No): saved for the file
+  // only, nothing is written to Hardcover.
+  async function linkEdition(path: string, to: {bookId: number; editionId: number}) {
+    const book = await withTimeout(hc.fetchBookDetail(auth, to.bookId, [to.editionId]), 20_000, 'book details');
+    const ed = toEditions(book).find(e => e.id === String(to.editionId));
+    if (!ed || !(ed.pages > 0)) throw new Error('This edition has no page count.');
+    const m = await meta.get(path);
+    m.linked = to;
+    m.edition = {id: to.editionId, pages: ed.pages};
+    await meta.save(path, m);
+  }
+
+  // A linked file, or a book that the library match did not find: the saved link, else the whole catalogue (catalogueBook), else the book
   // search on the page. Only from a button press: a touch never opens a dialog.
   async function linkFromCatalogue(path: string): Promise<ReadingItem | Ask> {
     const m = await meta.get(path);
@@ -114,9 +132,9 @@ export function createLibrary({auth, hc, meta, dialog}: {auth: OAuthSession; hc:
       20_000,
       'catalogue search',
     );
-    return (found && (await link(path, found))) ?? {search: [m.title, m.creator].filter(Boolean).join(' ')};
+    return (found && (await link(path, found))) ?? {search: searchText(m)};
   }
 
-  return {drop, list, cached: () => reading.list, resolvePath, addToLibrary, link, linkFromCatalogue};
+  return {drop, list, cached: () => reading.list, resolvePath, addToLibrary, link, linkEdition, linkFromCatalogue};
 }
 export type Library = ReturnType<typeof createLibrary>;

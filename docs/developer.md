@@ -19,7 +19,7 @@ The package holds no token and no secret, only a public OAuth client id. Users s
 1. Open [New Developer App](https://hardcover.app/account/developer-apps/new) on hardcover.app.
 2. Application type: **Mobile, desktop, or CLI**. Give it a name; users see it on the consent screen.
 3. Leave **Device Authorization Grant** on. No redirect URI is needed.
-4. Allow these scopes (the list is `SCOPES` in [`src/hardcover/auth.ts`](../src/hardcover/auth.ts)): `read:me:content`, `read:library`, `write:library`, `read:catalog`, `write:reviews`, `read:social`, `read:journal`.
+4. Allow these scopes (the list is `SCOPES` in [`src/hardcover/auth.ts`](../src/hardcover/auth.ts)): `read:me:content`, `read:library`, `write:library`, `read:catalog`, `write:reviews`, `read:social`, `write:social`, `read:journal`.
 5. Give the client id to the build, either as the environment variable `HARDCOVER_OAUTH_CLIENT_ID` or in a `.env` file in the repo root (gitignored):
 
    ```
@@ -77,7 +77,7 @@ Note that `adb shell input tap` does not reach the plugin's touch listener, so p
 | `index.js`, `src/plugin.ts` | Entry point; boot and wiring. |
 | `src/device/` | The only code that touches the Supernote SDK and the native module: reading the open document, permissions, files. |
 | `src/hardcover/` | The Hardcover API client and sign-in. |
-| `src/core/` | Pure logic and shared types: EPUB metadata, book matching, the progress tracker, journal and quote formatting. |
+| `src/core/` | Pure logic and shared types: EPUB metadata (a PDF has none: the reader picks book and edition), book matching, the progress tracker, journal and quote formatting. |
 | `src/page/` | What the plugin does for the pages, built with injected dependencies so tests can pass fakes. |
 | `src/ui/` | The pages (book page, journal, review, edition picker, messages) and the theme. Never imports the SDK. |
 | `android/` | The React Native host app and the `HardcoverNative` module (file read, write, stat). |

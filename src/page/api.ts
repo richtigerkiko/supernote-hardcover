@@ -2,10 +2,10 @@ import type {OAuthSession} from '@hardcover/sdk/oauth';
 import {isbnsIn} from '../core/match';
 import {joinEntry, journalEntry, journalPosition, splitEntry} from '../core/journal';
 import {NOT_READING, notTracked, type BookDetail, type Grants, type ReadingItem, type Sample} from '../core/types';
-import {log, withTimeout} from '../core/util';
+import {isPdf, log, withTimeout} from '../core/util';
 import {hasScope, SCOPES} from '../hardcover/auth';
 import {buildDetail, STATUS_ID, withEdition} from './detail';
-import type {Client, Dialog, Library} from './library';
+import {searchText, type Client, type Dialog, type Library} from './library';
 import type {Meta} from './meta';
 import type {Session, SessionApi} from './session';
 import type {Tracking} from './tracking';
@@ -53,7 +53,7 @@ export function createApi({auth, hc, meta, library, tracking, grants, dialog, se
   };
 
   return {
-    // -> {book} for DetailPage, or {message} when there is nothing to show
+    // -> {book} for DetailPage, an Ask (book search or edition picker), or {message} when there is nothing to show
     async load() {
       signInAbort?.abort(); // a reload (the button pressed again) drops a waiting sign-in: its code is no longer on screen
       const mine = ++loadSeq;
@@ -70,13 +70,14 @@ export function createApi({auth, hc, meta, library, tracking, grants, dialog, se
       }
       const s = await (session.pending ?? sample());
       session.pending = null;
-      if (!s) return {message: 'Open an EPUB in a document to see its Hardcover page.'};
+      if (!s) return {message: 'Open an EPUB or PDF to see its Hardcover page.'};
       meta.retry(s.path);
       await grants.need();
       const found = await withTimeout(library.resolvePath(s.path), 20_000, 'book lookup');
       const m = await meta.get(s.path);
-      if (m.failed) return {message: "Could not read this EPUB's title and author."};
-      const base = found ?? (await library.linkFromCatalogue(s.path));
+      if (m.failed) return {message: "Could not read this book's title and author."};
+      // The saved link (a book the reader confirmed or picked) outranks the library title match, which can sit on a wrong record.
+      const base = (m.linked ? null : found) ?? (await library.linkFromCatalogue(s.path));
       if (!('userBookId' in base)) {
         asking = s.path; // the page asks (book search or edition picker) and calls pickBook / addToLibrary for this file
         return base;
@@ -88,7 +89,18 @@ export function createApi({auth, hc, meta, library, tracking, grants, dialog, se
       const book = await withTimeout(hc.fetchBookDetail(auth, item.bookId, editionIds), 20_000, 'book details');
       const detail = buildDetail({book, item, saved: m.edition, sample: s, isbns: isbnsIn((m.ids ?? []).join(' '))});
       const chosen = detail.editions.find(e => e.id === detail.editionId);
+      // A record with no page count at all (often a duplicate) cannot show: the reader picks another book in the search,
+      // which becomes the file's link. Nothing is written to this one.
+      if (!detail.editions.some(e => !e.audio && e.pages > 0)) {
+        asking = s.path;
+        return {search: searchText(m)};
+      }
       if (!chosen || !(chosen.pages > 0)) return {message: 'Hardcover has no edition with a page count for this book.'};
+      // A PDF never gets a default edition: without a saved one that is still in the list, the reader picks (linkBook).
+      if (isPdf(s.path) && m.edition?.id !== Number(chosen.id)) {
+        asking = s.path;
+        return {pick: {bookId: item.bookId, editions: detail.editions, link: true}};
+      }
       // One edition per file: the default (file ISBN, library edition, first with pages) becomes the saved selection, so the
       // page, the tracker, the journal and the push all read the same one.
       if (m.edition?.id !== Number(chosen.id)) {
@@ -140,11 +152,19 @@ export function createApi({auth, hc, meta, library, tracking, grants, dialog, se
       await library.addToLibrary(path, m, {bookId: pick ? pick.bookId : c!.item.bookId, editionId});
       tracking.tracker.forget(path);
     },
+    // The edition picked for a PDF's book that is not added: link and edition are saved for the file. The page reloads after.
+    async linkBook({bookId, editionId}) {
+      const path = asking;
+      if (!path) return;
+      await grants.need();
+      await library.linkEdition(path, {bookId, editionId: Number(editionId)});
+      tracking.tracker.forget(path);
+    },
     async searchBooks(query) {
       await grants.need();
       return withTimeout(hc.searchBooks(auth, query), 20_000, 'book search');
     },
-    // The hit chosen in the book search: the add dialog, then the edition picker (returned) or nothing more (null: reload).
+    // The hit chosen in the book search: the add dialog, then the edition picker (returned; always for a PDF) or nothing more (null: reload).
     async pickBook(bookId) {
       if (!asking) throw new Error('no book loaded');
       await grants.need();
@@ -239,6 +259,15 @@ export function createApi({auth, hc, meta, library, tracking, grants, dialog, se
       const c = needBook();
       await grants.need();
       return hc.fetchReviews(auth, c.item.bookId, offset);
+    },
+    // Sign-ins stored before write:social was asked for cannot like: offer a new sign-in instead of an error from the server.
+    async likeReview(id, on) {
+      if (!(await ensureScope('write:social', 'Liking reviews'))) {
+        session.opened(); // reload shows Sign in
+        throw new Error('Liking reviews needs a new sign-in.');
+      }
+      await grants.need();
+      return hc.setLike(auth, id, on);
     },
     // The reader's own notes and quotes for the loaded book. Without read:journal the list cannot be read: ask for a new sign-in.
     async loadJournal(offset) {

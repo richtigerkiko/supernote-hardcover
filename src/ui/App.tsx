@@ -148,6 +148,7 @@ function AppInner(): React.JSX.Element {
         onClose={() => setJournal({passage: 'Call me Ishmael. Some years ago, never mind how long precisely, having little or no money in my purse, I thought I would sail about a little and see the watery part of the world.'})}
         onWriteReview={() => setReview(BLANK_REVIEW)}
         onLoadReviews={() => Promise.resolve({reviews: MOCK_REVIEWS, hasMore: false})}
+        onLikeReview={(id, on) => Promise.resolve((MOCK_REVIEWS.find(r => r.id === id)?.likes ?? 0) + (on ? 1 : 0))}
         onLoadJournal={() => Promise.resolve({entries: MOCK_JOURNAL, hasMore: false})}
         onEditJournal={(item, text) => Promise.resolve(item.event === 'note' ? text : joinEntry(splitEntry('quote', item.entry).passage, text))}
         onRemoveJournal={() => flaky()}
@@ -177,16 +178,16 @@ function AppInner(): React.JSX.Element {
       .finally(() => setSigningIn(false));
   };
   // A step of the add flow runs: the message page, with Retry (a reload) when it fails.
-  const wait = (text: string, step: Promise<unknown>) => {
+  const wait = (text: string, step: Promise<unknown>, failure = 'Could not add the book') => {
     setAsk(null);
     setMessage(text);
     step.catch((e: any) => {
-      setMessage(`Could not add the book: ${msg(e)}`);
+      setMessage(`${failure}: ${msg(e)}`);
       setFailed(true);
     });
   };
   if (ask && 'pick' in ask) {
-    const {bookId, editions} = ask.pick;
+    const {bookId, editions, link} = ask.pick;
     let picked = false; // "Use this edition" calls onPick and then onClose; only a Cancel closes the view (nothing is written)
     return (
       <EditionPicker
@@ -194,7 +195,8 @@ function AppInner(): React.JSX.Element {
         editionId=""
         onPick={editionId => {
           picked = true;
-          wait('Adding…', session.api!.addToLibrary({bookId, editionId}).then(session.opened)); // reload: the book is now on the shelves
+          // reload: the book is now on the shelves, or (link: a PDF's book that is not added) linked to the file
+          wait(link ? 'Loading…' : 'Adding…', session.api![link ? 'linkBook' : 'addToLibrary']({bookId, editionId}).then(session.opened), link ? 'Could not save the edition' : undefined);
         }}
         onClose={() => {
           if (!picked) session.close();
@@ -239,6 +241,7 @@ function AppInner(): React.JSX.Element {
         )
       }
       onLoadReviews={offset => session.api!.loadReviews(offset)}
+      onLikeReview={(id, on) => session.api!.likeReview(id, on)}
       onLoadJournal={offset => session.api!.loadJournal(offset)}
       onEditJournal={(item, text, privacy) => session.api!.editJournal(item, text, privacy)}
       onRemoveJournal={id => session.api!.removeJournal(id)}

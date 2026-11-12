@@ -17,7 +17,8 @@ jest.mock('@hardcover/sdk', () => ({
   },
   JournalEvent: {Quote: 'quote', Note: 'note'},
   PrivacySetting: {Public: 1, Follows: 2, Private: 3},
-  operations: {UpdateUserBookRead: 'UPDATE', UpdateUserBook: 'UPDATE_BOOK'},
+  LikeableType: {Review: 'UserBook'},
+  operations: {UpdateUserBookRead: 'UPDATE', UpdateUserBook: 'UPDATE_BOOK', Like: 'LIKE', Unlike: 'UNLIKE'},
 }));
 
 const ITEM: ReadingItem = {
@@ -241,16 +242,26 @@ test("an OAuth session is passed to the SDK as auth, not as a token", async () =
 
 
 describe('fetchReviews', () => {
-  const { fetchReviews } = require('../../src/hardcover/client');
-  const row = (id: number) => ({id, rating: 4.5, review_raw: ' Great ', review_has_spoilers: false, reviewed_at: '2026-10-02T10:00:00', user: {name: 'Ann', flair: 'Supporter'}});
+  const { fetchReviews, setLike } = require('../../src/hardcover/client');
+  const row = (id: number) => ({id, rating: 4.5, review_raw: ' Great ', review_has_spoilers: false, reviewed_at: '2026-10-02T10:00:00', likes_count: id === 1 ? 4 : null, likes: id === 1 ? [{id: 77}] : [], user: {name: 'Ann', flair: 'Supporter'}});
 
   test('maps rows, asks for one extra to know hasMore and sends the offset', async () => {
-    mockSdk.graphql = jest.fn().mockResolvedValue({user_books: Array.from({length: 11}, (_, i) => row(i + 1))});
+    mockSdk.graphql = jest.fn(async (q: string) => (q.includes('Me') ? {me: [{id: 9}]} : {user_books: Array.from({length: 11}, (_, i) => row(i + 1))}));
     const r = await fetchReviews('t', 5, 20);
-    expect(mockSdk.graphql.mock.calls[0][1]).toEqual({bookId: 5, limit: 11, offset: 20});
+    expect(mockSdk.graphql.mock.calls[1][0]).toContain('likes(where: {user_id: {_eq: $me}}, limit: 1)');
+    expect(mockSdk.graphql.mock.calls[1][1]).toEqual({bookId: 5, limit: 11, offset: 20, me: 9});
     expect(r.reviews).toHaveLength(10);
     expect(r.hasMore).toBe(true);
-    expect(r.reviews[0]).toEqual({id: 1, user: 'Ann', supporter: true, rating: 4.5, text: 'Great', spoiler: false, date: '2026-10-02'});
+    expect(r.reviews[0]).toEqual({id: 1, user: 'Ann', supporter: true, rating: 4.5, text: 'Great', spoiler: false, date: '2026-10-02', likes: 4, liked: true});
+    expect(r.reviews[1]).toMatchObject({likes: 0, liked: false});
+  });
+
+  test('setLike likes or unlikes the review as its library entry and returns the new count; no answer is an error', async () => {
+    mockSdk.request.mockResolvedValueOnce({upsert_like: {id: 1, likesCount: 5}}).mockResolvedValueOnce({delete_like: {likesCount: 0}}).mockResolvedValueOnce({upsert_like: null});
+    expect(await setLike('t', 7, true)).toBe(5);
+    expect(await setLike('t', 7, false)).toBe(0);
+    expect(mockSdk.request.mock.calls).toEqual([['LIKE', {likeableId: 7, likeableType: 'UserBook'}], ['UNLIKE', {likeableId: 7, likeableType: 'UserBook'}]]);
+    await expect(setLike('t', 7, true)).rejects.toThrow('did not change');
   });
 });
 
