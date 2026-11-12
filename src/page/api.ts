@@ -5,7 +5,7 @@ import {NOT_READING, notTracked, type BookDetail, type Grants, type ReadingItem,
 import {log, withTimeout} from '../core/util';
 import {hasScope, SCOPES} from '../hardcover/auth';
 import {buildDetail, STATUS_ID, withEdition} from './detail';
-import type {Client, Dialog, Library} from './library';
+import {searchText, type Client, type Dialog, type Library} from './library';
 import type {Meta} from './meta';
 import type {Session, SessionApi} from './session';
 import type {Tracking} from './tracking';
@@ -53,7 +53,7 @@ export function createApi({auth, hc, meta, library, tracking, grants, dialog, se
   };
 
   return {
-    // -> {book} for DetailPage, or {message} when there is nothing to show
+    // -> {book} for DetailPage, an Ask (book search or edition picker), or {message} when there is nothing to show
     async load() {
       signInAbort?.abort(); // a reload (the button pressed again) drops a waiting sign-in: its code is no longer on screen
       const mine = ++loadSeq;
@@ -76,7 +76,8 @@ export function createApi({auth, hc, meta, library, tracking, grants, dialog, se
       const found = await withTimeout(library.resolvePath(s.path), 20_000, 'book lookup');
       const m = await meta.get(s.path);
       if (m.failed) return {message: "Could not read this EPUB's title and author."};
-      const base = found ?? (await library.linkFromCatalogue(s.path));
+      // The saved link (a book the reader confirmed or picked) outranks the library title match, which can sit on a wrong record.
+      const base = (m.linked ? null : found) ?? (await library.linkFromCatalogue(s.path));
       if (!('userBookId' in base)) {
         asking = s.path; // the page asks (book search or edition picker) and calls pickBook / addToLibrary for this file
         return base;
@@ -88,6 +89,12 @@ export function createApi({auth, hc, meta, library, tracking, grants, dialog, se
       const book = await withTimeout(hc.fetchBookDetail(auth, item.bookId, editionIds), 20_000, 'book details');
       const detail = buildDetail({book, item, saved: m.edition, sample: s, isbns: isbnsIn((m.ids ?? []).join(' '))});
       const chosen = detail.editions.find(e => e.id === detail.editionId);
+      // A record with no page count at all (often a duplicate) cannot show: the reader picks another book in the search,
+      // which becomes the file's link. Nothing is written to this one.
+      if (!detail.editions.some(e => !e.audio && e.pages > 0)) {
+        asking = s.path;
+        return {search: searchText(m)};
+      }
       if (!chosen || !(chosen.pages > 0)) return {message: 'Hardcover has no edition with a page count for this book.'};
       // One edition per file: the default (file ISBN, library edition, first with pages) becomes the saved selection, so the
       // page, the tracker, the journal and the push all read the same one.
