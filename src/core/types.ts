@@ -44,10 +44,10 @@ export interface PublicReview {
   date: string; // YYYY-MM-DD
 }
 
-// The labels of the status list on the detail page (src/page/detail.ts maps them to Hardcover's status ids).
 // Why a tracked book is not pushed: progress only goes to a Currently Reading book with a read in progress.
 export const NOT_READING = 'Set the book to Currently reading to track it';
 
+// The labels of the status list on the detail page (src/page/detail.ts maps them to Hardcover's status ids).
 export const STATUSES = ['Want to read', 'Currently reading', 'Paused', 'Did not finish', 'Finished'] as const;
 
 export type Edition = {
