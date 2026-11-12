@@ -83,16 +83,17 @@ export function createLibrary({auth, hc, meta, dialog}: {auth: OAuthSession; hc:
   // ask whether to add it. Yes with an ISBN edition adds it; Yes without one returns the edition picker for the page to
   // show (nothing is written before the pick). On No the link is saved per file (`linked` in the metadata cache, like
   // KOReader's link), so there is no second prompt and the page works for the book without tracking and status.
-  async function link(path: string, to: Link): Promise<ReadingItem | Ask> {
+  // Null: the book has no edition to own (search hits are full of such records). Nothing is saved, or the file would be
+  // stuck on a book whose page cannot show.
+  async function link(path: string, to: Link): Promise<ReadingItem | Ask | null> {
     const m = await meta.get(path);
     const item = await entryFor(to.bookId); // on the shelves after all: nothing to ask or write
     if (!item) {
       const book = await withTimeout(hc.fetchBookDetail(auth, to.bookId), 20_000, 'book details');
       const editions = toEditions(book);
       const by = authorsOf(book).slice(0, 2).join(', '); // the rest are mostly translators
-      // With no edition to own the book is only linked, and load() says that no edition has a page count.
-      const ownable = !!to.editionId || editions.some(e => !e.audio && e.pages > 0);
-      if (ownable && (await dialog(`"${book.title}"${by ? ` by ${by}` : ''} is not in your Hardcover library. Add it as Want to Read and mark your copy as owned?`, 'No', 'Yes', false))) {
+      if (!to.editionId && !editions.some(e => !e.audio && e.pages > 0)) return null;
+      if (await dialog(`"${book.title}"${by ? ` by ${by}` : ''} is not in your Hardcover library. Add it as Want to Read and mark your copy as owned?`, 'No', 'Yes', false)) {
         if (!to.editionId) return {pick: {bookId: to.bookId, editions}};
         return (await addToLibrary(path, m, {bookId: to.bookId, editionId: to.editionId})) ?? stub(to);
       }
@@ -113,7 +114,7 @@ export function createLibrary({auth, hc, meta, dialog}: {auth: OAuthSession; hc:
       20_000,
       'catalogue search',
     );
-    return found ? link(path, found) : {search: [m.title, m.creator].filter(Boolean).join(' ')};
+    return (found && (await link(path, found))) ?? {search: [m.title, m.creator].filter(Boolean).join(' ')};
   }
 
   return {drop, list, cached: () => reading.list, resolvePath, addToLibrary, link, linkFromCatalogue};

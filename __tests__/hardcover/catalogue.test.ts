@@ -46,7 +46,7 @@ describe('catalogueBook (book not in the library)', () => {
     expect(found).toBeNull();
   });
 
-  // The real search hits in rank order (read-only `search` queries, 2026-11-12).
+  // The real search hits in rank order (read-only `search` queries, 2026-11-12; long Dune title and author lists shortened).
   const hit = (bookId: number, title: string, ...authors: string[]) => ({bookId, title, authors});
   const MEDITATIONS = [
     hit(157096, 'Meditations', 'Marcus Aurelius', 'Martin Hammond', 'Albert Wittstock', 'عادل مصطفى', 'Simone Mooij-Valk', 'Diskin Clay'),

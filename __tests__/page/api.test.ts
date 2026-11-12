@@ -130,6 +130,15 @@ describe('load', () => {
     expect(t.store.get(PATH).linked).toEqual({bookId: 7});
   });
 
+  test('a book with no edition that has pages is never linked: the match falls to the search, a pick is refused', async () => {
+    const t = setup({list: []});
+    t.hc.fetchBookDetail.mockImplementation(async () => ({...apiBook, editions: [{id: 3, pages: null, audioSeconds: 99}]}));
+    expect(await t.api.load()).toEqual({search: 'Dune Frank Herbert'});
+    await expect(t.api.pickBook(7)).rejects.toThrow('no edition with a page count');
+    expect(t.dialog).not.toHaveBeenCalled();
+    expect(t.store.get(PATH)?.linked).toBeUndefined();
+  });
+
   test('an EPUB whose title cannot be read keeps its own message', async () => {
     const t = setup({list: []});
     t.store.set(PATH, {ids: [], failed: true});

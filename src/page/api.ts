@@ -144,6 +144,7 @@ export function createApi({auth, hc, meta, library, tracking, grants, dialog, se
       if (!asking) throw new Error('no book loaded');
       await grants.need();
       const r = await library.link(asking, {bookId});
+      if (!r) throw new Error('Hardcover has no edition with a page count for this book. Pick another one.');
       return 'userBookId' in r ? null : r;
     },
     // Tracking is remembered per file like the edition. Turning it on starts from the page the book is at now (nothing is
