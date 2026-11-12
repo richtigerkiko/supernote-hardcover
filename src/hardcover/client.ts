@@ -312,6 +312,7 @@ export async function updateJournal(auth: Auth, id: number, {entry, privacy}: {e
 }
 
 export async function deleteJournal(auth: Auth, id: number): Promise<void> {
-  const data = await sdk(auth).graphql<{delete_reading_journal: Mutated}>('mutation RemoveJournal($id: Int!) { delete_reading_journal(id: $id) { errors } }', {id});
-  failed(data.delete_reading_journal);
+  // The delete output has only `id` (no `errors`, unlike update): no id back means nothing was deleted.
+  const data = await sdk(auth).graphql<{delete_reading_journal: {id: number} | null}>('mutation RemoveJournal($id: Int!) { delete_reading_journal(id: $id) { id } }', {id});
+  if (!data.delete_reading_journal?.id) throw new Error('Hardcover did not delete the entry');
 }
