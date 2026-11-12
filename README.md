@@ -8,13 +8,10 @@ A Supernote plugin that keeps your [Hardcover](https://hardcover.app) reading pr
 It runs fully on the device. The only network traffic is to Hardcover.
 
 <p>
-  <img src="docs/images/book-page.png" width="230" alt="The book page: cover, edition, progress, genres and description">
-  <img src="docs/images/sign-in.png" width="230" alt="Sign-in page with a link, a code and a QR code">
-  <img src="docs/images/quote.png" width="230" alt="Saving a selected passage as a quote">
-</p>
-<p>
-  <img src="docs/images/editions.png" width="230" alt="Choosing the edition">
-  <img src="docs/images/review.png" width="230" alt="Writing a review with a star rating">
+  <img src="docs/images/book-page.png" width="200" alt="The book page: cover, edition, progress, genres and description">
+  <img src="docs/images/editions.png" width="200" alt="Choosing the edition">
+  <img src="docs/images/quote.png" width="200" alt="Saving a selected passage as a quote">
+  <img src="docs/images/review.png" width="200" alt="Writing a review with a star rating">
 </p>
 
 ## Features
@@ -53,7 +50,7 @@ To update, install a newer package the same way. To remove the plugin, use **Uni
 
 **Edition.** Tap **Change** next to the edition to pick the one you are reading. Progress is sent as a page of that edition. Editions without a page count are not listed.
 
-**Quotes and notes.** Select text in the book, then tap the Hardcover icon in the selection toolbar. Choose **Quote** to save the passage, optionally with your thoughts, or **Note** to write a note without the passage. Each entry has its own privacy setting (Public, Follows, Private) and is **Private** unless you change it.
+**Quotes and notes.** Select text in the book, then tap the Hardcover icon (a book with a star) in the selection toolbar. Choose **Quote** to save the passage, optionally with your thoughts, or **Note** to write a note without the passage. Each entry has its own privacy setting (Public, Follows, Private) and is **Private** unless you change it.
 
 **Status.** The button at the bottom left of the book page changes the reading status.
 
