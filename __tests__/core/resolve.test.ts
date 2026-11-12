@@ -38,7 +38,12 @@ test('Circe: the EPUB ISBN is a typo and unknown to Hardcover, so title and auth
   expect(hit?.title).toBe('Circe');
 });
 
-test('a known ISBN of a book that is not being read gives null, even if the title would match something', async () => {
+test('a known ISBN whose book is not on the shelf falls back to the title', async () => {
+  const {hit} = await run({title: 'Circe', creator: 'Madeline Miller', ids: ['9781250899569']}); // 1197330 is not on the shelf
+  expect(hit?.title).toBe('Circe');
+});
+
+test('a known ISBN of a book that is not being read gives null when no title matches either', async () => {
   const {hit} = await run({title: 'The Wedding People', creator: 'Alison Espach', ids: ['calibre:8005', '9781250899569']});
   expect(hit).toBeNull();
 });

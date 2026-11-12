@@ -44,6 +44,7 @@ function AppInner(): React.JSX.Element {
     session.isFakeSdk().then(setPreview, () => setPreview(false));
     // For tester reports from other models (see CLAUDE.md "Other models").
     session.deviceType().then(t => log('window', windowFacts(win), 'device type', t), () => log('window', windowFacts(win), 'device type unknown'));
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the window facts are logged once, at mount
   }, []);
 
   // On the device: load the open book now, and again on every press of the toolbar button (the view stays mounted).
@@ -83,11 +84,21 @@ function AppInner(): React.JSX.Element {
   }, [preview]);
 
   if (preview === null) return <View />;
+  const msg = (e: any) => String(e?.message ?? e);
   const toggle = () => {
     const on = !tracking;
     setTracking(on);
-    session.api?.setTracking(on);
+    session.api?.setTracking(on).catch((e: any) => {
+      setTracking(!on);
+      setSyncNote(`Could not turn tracking ${on ? 'on' : 'off'}: ${msg(e)}`);
+    });
   };
+  // editionSaved is set only after the plugin accepted the edition.
+  const pickEdition = (editionId: string, b: BookDetail) =>
+    session.api?.setEdition(editionId).then(
+      () => setBook({...b, editionId, editionSaved: true}),
+      (e: any) => setSyncNote(`Could not change the edition: ${msg(e)}`),
+    );
 
   if (preview) {
     // preview only: mock data. The Tracking toggle also flips between the normal and the worst-case mock; Write review
@@ -152,10 +163,7 @@ ${code}`);
       <JournalPage
         book={book}
         passage={journal.passage}
-        onSetEdition={editionId => {
-          setBook({...book, editionId, editionSaved: true});
-          session.api?.setEdition(editionId);
-        }}
+        onSetEdition={editionId => pickEdition(editionId, book)}
         onSave={e => session.api!.saveJournal(e)}
         onClose={session.close}
       />
@@ -178,12 +186,12 @@ ${code}`);
       onSetStatus={status => {
         const before = book.status;
         setBook({...book, status});
-        session.api?.setStatus(status).catch(() => setBook(b => (b ? {...b, status: before} : b)));
+        session.api?.setStatus(status).catch((e: any) => {
+          setBook(b => (b ? {...b, status: before} : b));
+          setSyncNote(`Could not change the status: ${msg(e)}`);
+        });
       }}
-      onSetEdition={editionId => {
-        setBook({...book, editionId, editionSaved: true});
-        session.api?.setEdition(editionId);
-      }}
+      onSetEdition={editionId => pickEdition(editionId, book)}
       onAddToLibrary={() =>
         Promise.resolve(session.api?.addToLibrary()).then(
           () => session.opened(), // reload: the book is now on the shelves

@@ -4,7 +4,7 @@ import {journalEntry, journalPosition} from '../core/journal';
 import type {BookDetail, Grants, ReadingItem, Sample} from '../core/types';
 import {log, withTimeout} from '../core/util';
 import {hasScope, SCOPES} from '../hardcover/auth';
-import {buildDetail, STATUS_ID} from './detail';
+import {buildDetail, STATUS_ID, withEdition} from './detail';
 import type {Client, Dialog, Library} from './library';
 import type {Meta} from './meta';
 import type {Session, SessionApi} from './session';
@@ -71,14 +71,25 @@ export function createApi({auth, hc, meta, library, tracking, grants, dialog, se
       const found = await withTimeout(library.resolvePath(s.path), 20_000, 'book lookup');
       const m = await meta.get(s.path);
       if (m.failed) return {message: "Could not read this EPUB's title and author."};
-      const item = found ?? (await library.linkFromCatalogue(s.path));
-      if (!item) return {message: 'This book is not in your Hardcover library.'};
+      const base = found ?? (await library.linkFromCatalogue(s.path));
+      if (!base) return {message: 'This book is not in your Hardcover library.'};
+      let item = base;
       // resolvePath applied the saved edition to item, so the reading entry's own edition comes from the cached list
-      const entry = library.cached().find(r => r.userBookId === item.userBookId);
+      const entry = library.cached().find(r => r.userBookId === base.userBookId);
       const editionIds = [...new Set([entry?.editionId, m.edition?.id].filter((id): id is number => !!id))];
       const book = await withTimeout(hc.fetchBookDetail(auth, item.bookId, editionIds), 20_000, 'book details');
       const detail = buildDetail({book, item, saved: m.edition, sample: s, isbns: isbnsIn((m.ids ?? []).join(' '))});
-      if (!detail.editions.some(e => e.pages > 0)) return {message: 'Hardcover has no edition with a page count for this book.'};
+      const chosen = detail.editions.find(e => e.id === detail.editionId);
+      if (!chosen || !(chosen.pages > 0)) return {message: 'Hardcover has no edition with a page count for this book.'};
+      // One edition per file: the default (file ISBN, library edition, first with pages) becomes the saved selection, so the
+      // page, the tracker, the journal and the push all read the same one.
+      if (m.edition?.id !== Number(chosen.id)) {
+        m.edition = {id: Number(chosen.id), pages: chosen.pages};
+        await meta.save(s.path, m);
+        tracking.tracker.forget(s.path);
+        item = withEdition(item, m.edition) ?? item;
+      }
+      detail.editionSaved = true;
       if (mine === loadSeq) current = {path: s.path, item, detail, sample: s, editionId: detail.editionId};
       if (!detail.inLibrary) return {book: detail, tracking: false, sync: 'Not in your library: tracking and status are off.'};
       return {book: detail, tracking: m.tracking === true, sync: tracking.syncNote(s.path)};
@@ -121,20 +132,21 @@ export function createApi({auth, hc, meta, library, tracking, grants, dialog, se
       const c = needBook();
       const m = await meta.get(c.path);
       m.tracking = on;
-      meta.save(c.path, m);
+      if (on) m.book = {bookId: c.item.bookId, userBookId: c.item.userBookId, title: c.item.title}; // the tracker needs no library list
+      await meta.save(c.path, m);
       tracking.tracker.forget(c.path);
       log(on ? 'tracking on for' : 'tracking off for', c.item.title);
     },
     // The edition is remembered per file in the metadata cache and used for the pages we compute from now on.
     async setEdition(editionId) {
-      if (!current) return;
-      const ed = current.detail.editions.find(e => e.id === editionId);
-      if (!ed || !(ed.pages > 0)) return;
-      const m = await meta.get(current.path);
+      const c = needBook();
+      const ed = c.detail.editions.find(e => e.id === editionId);
+      if (!ed || !(ed.pages > 0)) throw new Error('This edition has no page count.');
+      const m = await meta.get(c.path);
       m.edition = {id: Number(ed.id), pages: ed.pages};
-      current.editionId = ed.id; // a journal entry saved after this uses the new edition too
-      meta.save(current.path, m);
-      tracking.tracker.forget(current.path);
+      c.editionId = ed.id; // a journal entry saved after this uses the new edition too
+      await meta.save(c.path, m);
+      tracking.tracker.forget(c.path);
     },
     // The selection read when hardcover-select was pressed ('' if none or not opened from that button).
     async passage() {

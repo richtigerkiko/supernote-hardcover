@@ -1,12 +1,20 @@
 // Words that carry no identity in a title; dropped from the Hardcover title only, never from the file text.
 const STOP = new Set(['the', 'a', 'an', 'of', 'and', 'der', 'die', 'das', 'ein', 'eine', 'und', 'von', 'de', 'la', 'le', 'el']);
 
+// Any script, so a Cyrillic title is words and a CJK title (no spaces) is one whole string. shortcut: an engine without
+// Unicode property escapes keeps the Latin-only split; upgrade if the device's Hermes lacks them.
+let SPLIT = /[^a-z0-9]+/;
+try {
+  SPLIT = new RegExp('[^\\p{L}\\p{N}\\p{M}]+', 'u');
+} catch {
+  /* keep the ASCII split */
+}
 const words = (s: string): string[] =>
   s
     .normalize('NFKD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
-    .split(/[^a-z0-9]+/)
+    .split(SPLIT)
     .filter(Boolean);
 
 // Finds which of the reader's books a file is, from its EPUB title + author.

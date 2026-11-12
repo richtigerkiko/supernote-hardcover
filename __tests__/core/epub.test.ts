@@ -62,3 +62,9 @@ test('rejects data that is not a zip, and a zip without container.xml', async ()
   const bare = reader(zipSync({a: strToU8('x')}));
   await expect(parseEpub(bare.read, bare.size)).rejects.toThrow(/container\.xml/);
 });
+
+test('decodes the XML entities in title and author', async () => {
+  const opf = OPF.replace('The Butcher of Nazareth', 'Tom &amp; Jerry&apos;s &quot;&lt;Best&gt;&quot;').replace('David S. Hay', 'A &amp;amp; B');
+  const r = reader(build('content.opf', opf));
+  expect(await parseEpub(r.read, r.size)).toMatchObject({title: "Tom & Jerry's \"<Best>\"", creator: 'A &amp; B'});
+});

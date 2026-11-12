@@ -1,9 +1,12 @@
 const path = require('path');
 const {getDefaultConfig, mergeConfig} = require('@react-native/metro-config');
 
-// Emulator only: SN_FAKE_SDK=1 swaps in the workspace's fake SDK, as the emulator has no PluginHost.
-const fakeSdk = path.resolve(__dirname, '../../tools/sn-plugin-lib-fake/index.js');
+// Emulator only: SN_FAKE_SDK=1 swaps in a fake SDK (the file named by SN_FAKE_SDK_PATH), as the emulator has no PluginHost.
 const useFakeSdk = process.env.SN_FAKE_SDK === '1';
+if (useFakeSdk && !process.env.SN_FAKE_SDK_PATH) {
+    throw new Error('SN_FAKE_SDK=1 needs SN_FAKE_SDK_PATH, the path of the fake sn-plugin-lib index.js');
+}
+const fakeSdk = useFakeSdk ? path.resolve(process.env.SN_FAKE_SDK_PATH) : '';
 
 /**
  * Metro configuration
