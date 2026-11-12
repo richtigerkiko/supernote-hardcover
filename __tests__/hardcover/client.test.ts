@@ -296,11 +296,11 @@ describe('journal read, edit, remove', () => {
   });
 
   test('delete sends the id and surfaces server errors', async () => {
-    mockSdk.graphql = jest.fn().mockResolvedValue({delete_reading_journal: {errors: null}});
+    mockSdk.graphql = jest.fn().mockResolvedValue({delete_reading_journal: {id: 7}});
     await deleteJournal('t', 7);
     expect(mockSdk.graphql.mock.calls[0][1]).toEqual({id: 7});
-    mockSdk.graphql = jest.fn().mockResolvedValue({delete_reading_journal: {errors: ['nope']}});
-    await expect(deleteJournal('t', 7)).rejects.toThrow(/refused/);
+    mockSdk.graphql = jest.fn().mockResolvedValue({delete_reading_journal: null});
+    await expect(deleteJournal('t', 7)).rejects.toThrow(/did not delete/);
   });
 });
 
