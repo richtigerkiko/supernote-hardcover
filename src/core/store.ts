@@ -20,7 +20,7 @@ export interface FileMeta extends EpubMeta {
   edition?: {id: number; pages: number}; // the edition the reader picked for this file
   tracking?: boolean; // tracking is switched on for this file
   book?: {bookId: number; userBookId: number; title: string}; // the library entry, saved when tracking is switched on
-  linked?: {bookId: number; editionId?: number}; // the reader said No to adding it: the catalogue book this file is
+  linked?: {bookId: number; editionId?: number}; // the catalogue book this file is (found, or picked in the book search); kept when it is added
 }
 
 // A JSON file behind the native adapter {readTextFile, writeFile, stat}, with an in-memory copy. It never throws:

@@ -4,21 +4,28 @@
 // only) and `mode` which page the pressed button opens.
 // The view stays mounted after it is closed (measured: "Running" is logged once), so a later press of the button
 // does not remount the page: plugin.ts calls opened() on every press and the page reloads its book from it.
-import type {BookDetail as PageBook, Entry, JournalItem, Privacy, PublicReview, Review, Sample} from '../core/types';
+import type {BookDetail as PageBook, CatalogueBook, Edition, Entry, JournalItem, Privacy, PublicReview, Review, Sample} from '../core/types';
 
-/** What the page shows after load(): a book, or a message when there is nothing to show. */
-export type LoadResult = {message: string; signIn?: boolean} | {book: PageBook; tracking: boolean; sync: string};
+/** The page must ask before the book can show: `search` opens the book search with this text (no automatic match), `pick` the edition picker for a book the reader said Yes to adding. */
+export type Ask = {search: string} | {pick: {bookId: number; editions: Edition[]}};
+/** What the page shows after load(): a book, a question (Ask), or a message when there is nothing to show. */
+export type LoadResult = {message: string; signIn?: boolean} | {book: PageBook; tracking: boolean; sync: string} | Ask;
 
 /** What plugin.ts hands the page; the page never sees the SDK or the token. */
 export interface SessionApi {
   load(): Promise<LoadResult>;
   signIn(onCode: (uri: string, code: string, qr: string) => void): Promise<boolean>;
-  setTracking(on: boolean): Promise<void>;
+  setTracking(on: boolean): Promise<{sync: string; status?: 'Currently reading'}>; // the new sync line, and the status if the offer changed it
   setEdition(editionId: string): Promise<void>;
   passage(): Promise<string>;
   saveJournal(entry: Entry): Promise<void>;
-  setStatus(label: string): Promise<void>;
-  addToLibrary(): Promise<void>;
+  setStatus(label: string): Promise<string>; // the new sync line
+  /** Adds the loaded page's linked book with the file's edition, or (after an Ask) the given book with the picked edition. Reload after. */
+  addToLibrary(pick?: {bookId: number; editionId: string}): Promise<void>;
+  /** Catalogue hits for the book search. */
+  searchBooks(query: string): Promise<CatalogueBook[]>;
+  /** The reader chose this hit: asks to add it. Resolves with the edition picker to show, or null when done (reload). */
+  pickBook(bookId: number): Promise<Ask | null>;
   /** The review to start from (what the entry holds). false: the stored sign-in lacked write:reviews and was dropped, so reload to sign in again. Rejects with a message when the book is not in the library. */
   writeReview(): Promise<Review | false>;
   saveReview(review: Review): Promise<void>;

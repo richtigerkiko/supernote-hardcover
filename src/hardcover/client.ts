@@ -10,7 +10,7 @@ import {
   type TokenSource,
   type UserBookStatus,
 } from '@hardcover/sdk';
-import type {CatalogueBook, JournalItem, Privacy, PublicReview, ReadingItem} from '../core/types';
+import {notTracked, type CatalogueBook, type JournalItem, type Privacy, type PublicReview, type ReadingItem} from '../core/types';
 
 // One client per credential. `auth` is a plain token (tests) or an OAuth session that refreshes itself and replays a
 // 401 once. pace: false because the SDK would wait with setTimeout, which the host only runs in lifecycle state 2 (see
@@ -30,7 +30,7 @@ function sdk(auth: Auth): HardcoverClient {
 const LIBRARY_PAGE = 100;
 
 function toItem(u: LibraryListItem | LibraryEntryWithBook): ReadingItem {
-  const r = u.userBookReads[0]; // newest first
+  const r = u.userBookReads.find(x => !x.finishedAt); // newest first: the read in progress, never a finished one
   return {
     userBookId: u.id,
     bookId: u.bookId,
@@ -54,7 +54,7 @@ export async function fetchUserBooks(auth: Auth): Promise<ReadingItem[]> {
   }
 }
 
-// One library entry by its id (null: gone), with its newest read. Used at each progress push.
+// One library entry by its id (null: gone), with its status and its read in progress. Used at each progress push.
 export async function fetchUserBook(auth: Auth, userBookId: number): Promise<ReadingItem | null> {
   const u = await sdk(auth).library.get(userBookId);
   return u && toItem(u);
@@ -94,7 +94,7 @@ export async function saveJournal(auth: Auth, {bookId, editionId, event, entry, 
 
 // A review on a library entry, as hardcover.app's edit form has it. Needs write:reviews. One UpdateUserBook request (the
 // SDK's library.update has no sponsored flag), so a retry never leaves half of it saved. No rating leaves the existing one
-// alone (null would clear it); sponsored is only sent when set, because the read side does not return it.
+// alone (null would clear it); sponsored is always sent, so a review can be unmarked (checked live 2026-11-12).
 export interface ReviewInput {
   markdown: string;
   hasSpoilers: boolean;
@@ -112,17 +112,22 @@ export async function saveReview(auth: Auth, userBookId: number, {markdown, hasS
       ...(rating != null ? {rating} : {}),
       review_markdown: markdown.trim(),
       review_has_spoilers: hasSpoilers,
-      ...(sponsored ? {sponsored_review: true} : {}),
+      sponsored_review: sponsored,
       private_notes: notes.trim(),
     },
   });
 }
 
-// What the entry already holds, to prefill the card (saving replaces it).
-export async function fetchReview(auth: Auth, userBookId: number): Promise<{markdown: string; hasSpoilers: boolean; notes: string; rating: number | null}> {
-  const e = await sdk(auth).library.get(userBookId);
+// What the entry already holds, to prefill the card (saving replaces it). The SDK's entry has no sponsored flag, so
+// user_books.sponsored_review is read with one small query.
+export async function fetchReview(auth: Auth, userBookId: number): Promise<{markdown: string; hasSpoilers: boolean; sponsored: boolean; notes: string; rating: number | null}> {
+  const c = sdk(auth);
+  const [e, flag] = await Promise.all([
+    c.library.get(userBookId),
+    c.graphql<{user_books: {sponsored_review: boolean}[]}>('query Sponsored($id: Int!) { user_books(where: {id: {_eq: $id}}) { sponsored_review } }', {id: userBookId}),
+  ]);
   if (!e) throw new Error('library entry not found');
-  return {markdown: e.reviewMarkdown ?? '', hasSpoilers: e.reviewHasSpoilers, notes: e.privateNotes ?? '', rating: e.rating};
+  return {markdown: e.reviewMarkdown ?? '', hasSpoilers: e.reviewHasSpoilers, sponsored: !!flag.user_books?.[0]?.sponsored_review, notes: e.privateNotes ?? '', rating: e.rating};
 }
 
 // Which books do these ISBN-13s belong to? Different editions of one book share a book_id.
@@ -131,46 +136,23 @@ export async function bookIdsForIsbns(auth: Auth, isbns: string[]): Promise<numb
   return [...new Set(editions.map(e => e.bookId))];
 }
 
-// Hardcover's update replaces what it is not sent (reported by other clients), so every existing
-// field of the read is sent back along with the new progress.
-export interface ProgressInput {
-  progress_pages: number;
-  edition_id?: number;
-  started_at?: string;
-  finished_at?: string;
-}
-export function progressInput(item: Pick<ReadingItem, 'editionId' | 'read'>, pages: number): ProgressInput {
-  const r = item.read;
-  const input: ProgressInput = {progress_pages: pages};
-  const edition = r?.edition_id ?? item.editionId;
-  if (edition) input.edition_id = edition;
-  if (r?.started_at) input.started_at = r.started_at;
-  if (r?.finished_at) input.finished_at = r.finished_at;
-  return input;
-}
-
-// The day as the reader lives it; toISOString gives the UTC day, which is yesterday just after midnight east of UTC.
-export const localDate = (d: Date): string =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
-// shortcut: reads.setProgress is not used. It takes no edition_id or dates, and throws when the book has no read in
-// progress, while this plugin also tracks books outside Currently Reading. Typed operations keep the exact write.
+// Progress follows the documented read lifecycle (docs/hardcover-api guides/updatingabooksprogress.md, checked live
+// 2026-11-12), like the KOReader plugin:
+//  - only a book that is Currently Reading with a read in progress is written; anything else throws why (notTracked). A page
+//    turn never changes a status and never starts a read: the status picker does (the server starts the read).
+//  - update_user_book_read changes only the fields it is sent, so only the page and the file's edition go out.
+//  - progress that reaches the end of the edition would finish the read and mark the book Read, so the last page is sent
+//    as one before it: a book is finished only with the status picker.
+// shortcut: reads.setProgress is not used, it takes no edition_id. The typed operation keeps the exact write.
 export async function saveProgress(auth: Auth, item: ReadingItem, pages: number): Promise<void> {
   if (!(pages > 0)) throw new Error('refusing to save: no page count');
-  const c = sdk(auth);
-  // A finished read stays as it was: reading the book again starts a new read.
-  const open = item.read?.finished_at ? null : item.read;
-  const input = progressInput({editionId: item.editionId, read: open}, pages);
-  if (open) {
-    await c.request(operations.UpdateUserBookRead, {id: open.id, read: input});
-    return;
-  }
-  const started_at = localDate(new Date());
-  const data = await c.request(operations.AddUserBookRead, {userBookId: item.userBookId, read: {...input, started_at}});
-  // The tracker pushes this same item next time: remember the new read so that push is an update, not a second insert.
-  const id = data.insert_user_book_read?.userBookRead?.id;
-  if (typeof id !== 'number') throw new Error('Hardcover: insert returned no read id');
-  item.read = {id, started_at, finished_at: null, progress_pages: pages, edition_id: input.edition_id ?? null};
+  const read = item.read;
+  const why = notTracked(item);
+  if (why || !read) throw new Error(why);
+  const progress_pages = Math.min(pages, (item.editionPages ?? Infinity) - 1);
+  if (progress_pages < 1) return; // an edition with one page: any progress would finish it
+  const edition = read.edition_id ?? item.editionId;
+  await sdk(auth).request(operations.UpdateUserBookRead, {id: read.id, read: {progress_pages, ...(edition ? {edition_id: edition} : {})}});
 }
 
 // Everything the detail page shows about a book, and all its editions (the page hides audiobooks).
@@ -212,12 +194,11 @@ export async function searchBooks(auth: Auth, query: string): Promise<CatalogueB
 // Having the EPUB means owning the book: mark one of its editions as owned (Owned list only, no library entry; checked
 // 2026-11-10), then add the book. A library entry cannot be made without a status: the server gives Want to Read
 // (checked 2026-11-10), so this is only called for a book with no entry yet. `imported` keeps it out of followers' feeds.
-// The edition is also put on the new entry, and returned so the caller can use its page count for this file.
-// shortcut: with no ISBN match the owned edition is the first one with a page count, else the first; upgrade if it matters.
-export async function addOwned(auth: Auth, bookId: number, editionId?: number): Promise<{id: number; pages: number | null}> {
+// The edition (the file's ISBN edition, or the one the reader picked) is also put on the new entry, and returned so the
+// caller can use its page count for this file.
+export async function addOwned(auth: Auth, bookId: number, editionId: number): Promise<{id: number; pages: number | null}> {
   const c = sdk(auth);
-  const listed = editionId ? [] : (await c.books.editions(bookId, {limit: EDITIONS_SHOWN})).items;
-  const edition = editionId ? await c.books.edition(editionId) : (listed.find(e => (e.pages ?? 0) > 0) ?? listed[0]);
+  const edition = await c.books.edition(editionId);
   // Nothing to own means nothing is written: an unowned entry would never be retried, it is found in the library next time.
   if (!edition) throw new Error('Hardcover has no edition of this book to mark as owned');
   await c.library.markOwned(edition.id); // safe to repeat, so a failed add below can simply be retried

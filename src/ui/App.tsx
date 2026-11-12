@@ -8,13 +8,15 @@
 
 import React, {useEffect, useState} from 'react';
 import {useWindowDimensions, View} from 'react-native';
+import BookSearch from './BookSearch';
 import DetailPage from './DetailPage';
+import EditionPicker from './EditionPicker';
 import JournalPage from './JournalPage';
 import Message from './Message';
 import ReviewPage from './ReviewPage';
 import {MOCK_BOOK, MOCK_JOURNAL, MOCK_LONG, MOCK_REVIEWS} from './preview/mockBook';
 import {BLANK_REVIEW, type BookDetail, type Review} from '../core/types';
-import {session} from '../page/session';
+import {session, type Ask} from '../page/session';
 import {joinEntry, splitEntry} from '../core/journal';
 import {log} from '../core/util';
 import {Scaled, windowFacts} from './theme';
@@ -40,6 +42,7 @@ function AppInner(): React.JSX.Element {
   const [qr, setQr] = useState(''); // the sign-in link as a QR code, while waiting for the approval
   const [code, setCode] = useState<{uri: string; code: string} | undefined>(); // the sign-in URL and code, shown with the QR code
   const [failed, setFailed] = useState(false); // loading the book failed: the message offers Retry
+  const [ask, setAsk] = useState<Ask | null>(null); // set: the book search or the edition picker is shown before the book can load
   const [journal, setJournal] = useState<{passage: string} | null>(null); // set: the hardcover-select page is shown
   const [review, setReview] = useState<Review | null>(null); // set: the review card is shown, starting from this
 
@@ -62,6 +65,7 @@ function AppInner(): React.JSX.Element {
       setQr('');
       setCode(undefined);
       setFailed(false);
+      setAsk(null);
       setTracking(false);
       setSyncNote('');
       setJournal(null);
@@ -77,10 +81,10 @@ function AppInner(): React.JSX.Element {
             setBook(r.book);
             setTracking(r.tracking);
             setSyncNote(r.sync);
-          } else {
+          } else if (r.message) {
             setMessage(r.message);
             setCanSignIn(!!r.signIn);
-          }
+          } else setAsk(r);
         })
         .catch((e: any) => {
           if (mine !== latest) return;
@@ -94,13 +98,20 @@ function AppInner(): React.JSX.Element {
 
   if (preview === null) return <View />;
   const msg = (e: any) => String(e?.message ?? e);
+  // The page is not reloaded after a toggle or a status change: both return the new sync line.
   const toggle = () => {
     const on = !tracking;
     setTracking(on);
-    session.api?.setTracking(on).catch((e: any) => {
-      setTracking(!on);
-      setSyncNote(`Could not turn tracking ${on ? 'on' : 'off'}: ${msg(e)}`);
-    });
+    session.api?.setTracking(on).then(
+      r => {
+        setSyncNote(r.sync);
+        if (r.status) setBook(b => (b ? {...b, status: r.status!} : b));
+      },
+      (e: any) => {
+        setTracking(!on);
+        setSyncNote(`Could not turn tracking ${on ? 'on' : 'off'}: ${msg(e)}`);
+      },
+    );
   };
   // editionSaved is set only after the plugin accepted the edition.
   const pickEdition = (editionId: string, b: BookDetail) =>
@@ -165,6 +176,42 @@ function AppInner(): React.JSX.Element {
       )
       .finally(() => setSigningIn(false));
   };
+  // A step of the add flow runs: the message page, with Retry (a reload) when it fails.
+  const wait = (text: string, step: Promise<unknown>) => {
+    setAsk(null);
+    setMessage(text);
+    step.catch((e: any) => {
+      setMessage(`Could not add the book: ${msg(e)}`);
+      setFailed(true);
+    });
+  };
+  if (ask && 'pick' in ask) {
+    const {bookId, editions} = ask.pick;
+    let picked = false; // "Use this edition" calls onPick and then onClose; only a Cancel closes the view (nothing is written)
+    return (
+      <EditionPicker
+        editions={editions}
+        editionId=""
+        onPick={editionId => {
+          picked = true;
+          wait('Adding…', session.api!.addToLibrary({bookId, editionId}).then(session.opened)); // reload: the book is now on the shelves
+        }}
+        onClose={() => {
+          if (!picked) session.close();
+        }}
+      />
+    );
+  }
+  if (ask) {
+    return (
+      <BookSearch
+        query={ask.search}
+        onSearch={q => session.api!.searchBooks(q)}
+        onPick={bookId => wait('Loading…', session.api!.pickBook(bookId).then(r => (r ? setAsk(r) : session.opened())))}
+        onClose={session.close}
+      />
+    );
+  }
   if (!book) return <Message text={message} qr={qr} code={code} onClose={session.close} onSignIn={canSignIn && !signingIn ? signIn : undefined} onRetry={failed ? session.opened : undefined} />;
   if (review) return <ReviewPage book={book} initial={review} onSave={r => session.api!.saveReview(r)} onClose={() => setReview(null)} />;
   if (journal) {
@@ -198,10 +245,13 @@ function AppInner(): React.JSX.Element {
       onSetStatus={status => {
         const before = book.status;
         setBook({...book, status});
-        session.api?.setStatus(status).catch((e: any) => {
-          setBook(b => (b ? {...b, status: before} : b));
-          setSyncNote(`Could not change the status: ${msg(e)}`);
-        });
+        session.api?.setStatus(status).then(
+          s => setSyncNote(s),
+          (e: any) => {
+            setBook(b => (b ? {...b, status: before} : b));
+            setSyncNote(`Could not change the status: ${msg(e)}`);
+          },
+        );
       }}
       onSetEdition={editionId => pickEdition(editionId, book)}
       onAddToLibrary={() =>

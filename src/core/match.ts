@@ -21,15 +21,18 @@ const words = (s: string): string[] =>
 // A book matches when every meaningful word of its Hardcover title appears in the text AND an author's
 // surname appears (or the title has 3+ meaningful words). This is the fallback for when no ISBN settles it
 // (see resolve.ts). Returns the single best match, or null when none or ambiguous.
+// `ranked` is for catalogue search hits (best first), where titles often repeat the author ("Meditations of Marcus
+// Aurelius"): words of the hit's own author names do not count, and the first of the tied hits wins.
 // shortcut: exact word match, no fuzzy spelling or transliteration; upgrade if a real file misses.
-export function matchBook<T extends {title: string; authors: string[]}>(text: string, candidates: T[]): T | null {
+export function matchBook<T extends {title: string; authors: string[]}>(text: string, candidates: T[], ranked = false): T | null {
   const have = new Set(words(text));
   let best: {candidate: T; score: number} | null = null;
   let tie = false;
   for (const c of candidates) {
     const all = words(c.title);
     const need = all.filter(w => !STOP.has(w));
-    const needle = need.length ? need : all;
+    const names = new Set(ranked ? c.authors.flatMap(words) : []);
+    const needle = (need.length ? need : all).filter(w => !names.has(w)); // a title that is only the author's name is no match
     if (!needle.length || !needle.every(w => have.has(w))) continue;
     const author = c.authors.some(a => have.has(words(a).pop() ?? ''));
     if (!author && needle.length < 3) continue;
@@ -39,7 +42,7 @@ export function matchBook<T extends {title: string; authors: string[]}>(text: st
       tie = false;
     } else if (score === best.score) tie = true;
   }
-  return tie ? null : best && best.candidate;
+  return tie && !ranked ? null : best && best.candidate;
 }
 
 // ISBN-13s in any text (filename, EPUB identifiers); hyphens allowed. Checksum-verified so a random
