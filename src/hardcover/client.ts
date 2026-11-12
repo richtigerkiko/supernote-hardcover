@@ -258,14 +258,11 @@ const JOURNAL_QUERY = `query BookJournal($userId: Int!, $bookId: Int!, $limit: I
 
 type JournalRow = {id: number; event: string; entry: string | null; action_at: string; privacy_setting_id: number; metadata: {position?: {value?: number}} | null};
 
-// `me` is a list in Hardcover's API. Cached per sign-in object; the id never changes for an account.
-let meId: {auth: Auth; id: number} | undefined;
+// `me` is a list in Hardcover's API. Not cached: the sign-in object survives an account switch, and one small request per page is cheap.
 async function userId(auth: Auth): Promise<number> {
-  if (meId?.auth === auth) return meId.id;
   const data = await sdk(auth).graphql<{me: {id: number} | {id: number}[]}>('query Me { me { id } }', {});
   const id = [data.me].flat()[0]?.id;
   if (typeof id !== 'number') throw new Error('Hardcover: no user id');
-  meId = {auth, id};
   return id;
 }
 

@@ -237,8 +237,8 @@ function JournalRow({item, onEdit, onRemove}: {item: JournalItem; onEdit: (text:
   );
 }
 
-type Journal = {items: JournalItem[]; hasMore: boolean; loaded: boolean; state: 'idle' | 'loading' | 'error'};
-const NO_JOURNAL: Journal = {items: [], hasMore: false, loaded: false, state: 'idle'};
+type Journal = {items: JournalItem[]; fetched: number; hasMore: boolean; loaded: boolean; state: 'idle' | 'loading' | 'error'};
+const NO_JOURNAL: Journal = {items: [], fetched: 0, hasMore: false, loaded: false, state: 'idle'};
 
 export default function DetailPage({book, tracking, syncNote, onToggleTracking, onClose, onWriteReview, onSetStatus, onSetEdition, onAddToLibrary, onLoadReviews, onLoadJournal, onEditJournal, onRemoveJournal}: Props) {
   const inLibrary = book.inLibrary !== false;
@@ -273,8 +273,8 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
   const loadJournal = () => {
     if (!onLoadJournal || jn.state === 'loading') return;
     setJn(j => ({...j, state: 'loading'}));
-    onLoadJournal(jn.items.length).then(
-      p => setJn(j => ({items: [...j.items, ...p.entries], hasMore: p.hasMore, loaded: true, state: 'idle'})),
+    onLoadJournal(jn.fetched).then( // not items.length: removed rows must not shift the next page
+      p => setJn(j => ({items: [...j.items, ...p.entries], fetched: j.fetched + p.entries.length, hasMore: p.hasMore, loaded: true, state: 'idle'})),
       () => setJn(j => ({...j, state: 'error'})),
     );
   };

@@ -266,3 +266,18 @@ describe('journal tab', () => {
     expect(all(tree)).toContain('a note');
   });
 });
+
+test('journal Load more offsets by rows fetched, not rows left after a removal', async () => {
+  const e = (id: number) => ({id, event: 'note' as const, entry: `n${id}`, page: null, date: '2026-11-09', privacy: 3 as const});
+  const onLoadJournal = jest.fn().mockResolvedValueOnce({entries: [e(1), e(2)], hasMore: true}).mockResolvedValue({entries: [], hasMore: false});
+  const tree = render({onLoadJournal, onRemoveJournal: jest.fn(async () => {})});
+  const flush = () => act(async () => {});
+  press(tree, 'Journal tab');
+  await flush();
+  const at = (label: string) => act(() => tree.root.findAll((x: any) => x.props.accessibilityLabel === label && x.props.onPress)[0].props.onPress());
+  at('Remove');
+  at('Remove entry');
+  await flush();
+  act(() => tree.root.findAll((x: any) => x.props.onPress && texts(x).includes('Load more'))[0].props.onPress());
+  expect(onLoadJournal.mock.calls.map(c => c[0])).toEqual([0, 2]);
+});
