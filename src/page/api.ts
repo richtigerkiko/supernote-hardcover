@@ -25,6 +25,7 @@ export interface ApiDeps {
 // The functions the page calls (through src/page/session.ts, same JS runtime as the page).
 export function createApi({auth, hc, meta, library, tracking, grants, dialog, session, sample}: ApiDeps): SessionApi {
   let current: {path: string; item: ReadingItem; detail: BookDetail; sample: Sample; editionId: string} | null = null; // the book the page was opened on
+  let asking: string | null = null; // the file the book search or the edition picker is open for
   let signInAbort: AbortController | null = null; // the sign-in that is waiting for its approval, if any
   let askedScopes = false; // the missing-scopes dialog in load() was shown (not again until a restart, so a scope the server never grants cannot loop)
   let loadSeq = 0; // a slow load must not overwrite `current` after a newer one
@@ -72,7 +73,10 @@ export function createApi({auth, hc, meta, library, tracking, grants, dialog, se
       const m = await meta.get(s.path);
       if (m.failed) return {message: "Could not read this EPUB's title and author."};
       const base = found ?? (await library.linkFromCatalogue(s.path));
-      if (!base) return {message: 'This book is not in your Hardcover library.'};
+      if (!('userBookId' in base)) {
+        asking = s.path; // the page asks (book search or edition picker) and calls pickBook / addToLibrary for this file
+        return base;
+      }
       let item = base;
       // resolvePath applied the saved edition to item, so the reading entry's own edition comes from the cached list
       const entry = library.cached().find(r => r.userBookId === base.userBookId);
@@ -117,14 +121,31 @@ export function createApi({auth, hc, meta, library, tracking, grants, dialog, se
       log('signed in');
       return true;
     },
-    // The linked book (not in the library) is added now: Want to Read, edition marked as owned. The page reloads after.
-    async addToLibrary() {
+    // A book that is not in the library is added now: Want to Read, edition marked as owned. The page reloads after.
+    // With `pick` it is the book and edition chosen in the edition picker after an Ask; without, the loaded page's linked
+    // book with the file's edition (load() saved one).
+    async addToLibrary(pick) {
       const c = current;
-      if (!c || c.item.userBookId) return;
+      const path = pick ? asking : c && !c.item.userBookId ? c.path : null;
+      if (!path) return;
       await grants.need();
-      const m = await meta.get(c.path);
-      await library.addToLibrary(c.path, m, m.linked ?? {bookId: c.item.bookId});
-      tracking.tracker.forget(c.path);
+      const m = await meta.get(path);
+      const editionId = pick ? Number(pick.editionId) : (m.edition?.id ?? m.linked?.editionId);
+      if (!editionId) throw new Error('This book has no edition to mark as owned.');
+      await library.addToLibrary(path, m, {bookId: pick ? pick.bookId : c!.item.bookId, editionId});
+      tracking.tracker.forget(path);
+    },
+    async searchBooks(query) {
+      await grants.need();
+      return withTimeout(hc.searchBooks(auth, query), 20_000, 'book search');
+    },
+    // The hit chosen in the book search: the add dialog, then the edition picker (returned) or nothing more (null: reload).
+    async pickBook(bookId) {
+      if (!asking) throw new Error('no book loaded');
+      await grants.need();
+      const r = await library.link(asking, {bookId});
+      if (!r) throw new Error('Hardcover has no edition with a page count for this book. Pick another one.');
+      return 'userBookId' in r ? null : r;
     },
     // Tracking is remembered per file like the edition. Turning it on starts from the page the book is at now (nothing is
     // sent for it); turning it off drops anything not yet sent.

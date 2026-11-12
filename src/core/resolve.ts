@@ -45,6 +45,6 @@ export async function catalogueBook({
   }
   if (!meta.title) return null;
   const text = `${meta.title} ${meta.creator ?? ''}`;
-  const hit = matchBook(text, await searchBooks(text));
+  const hit = matchBook(text, await searchBooks(text), true);
   return hit ? {bookId: hit.bookId} : null;
 }

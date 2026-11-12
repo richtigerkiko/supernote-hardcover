@@ -72,13 +72,77 @@ describe('load', () => {
     expect(await api.load()).toEqual({message: expect.stringContaining('Open an EPUB')});
   });
 
-  test('a book outside the library is added after a Yes, and the dialog is asked once', async () => {
+  const added = (t: ReturnType<typeof setup>, id: number, pages: number) =>
+    t.hc.addOwned.mockImplementation(async () => (t.hc.fetchUserBookForBook.mockResolvedValue(item()), {id, pages})); // the entry exists once added
+
+  test('a book whose ISBN Hardcover knows is added with that edition after a Yes, with no picker', async () => {
     const t = setup({list: []});
-    t.hc.addOwned.mockImplementation(async () => (t.hc.fetchUserBookForBook.mockResolvedValue(item()), {id: 1, pages: 300})); // the entry exists once added
+    t.hc.editionsForIsbns.mockResolvedValue([{id: 2, bookId: 5}]);
+    t.store.set(PATH, {title: 'Dune', creator: 'Frank Herbert', ids: ['9781668287323']});
+    added(t, 2, 350);
     const r: any = await t.api.load();
     expect(t.dialog).toHaveBeenCalledTimes(1);
-    expect(t.hc.addOwned).toHaveBeenCalledWith(t.auth, 5, undefined);
+    expect(t.hc.addOwned).toHaveBeenCalledWith(t.auth, 5, 2);
+    expect(r.book).toMatchObject({inLibrary: true, editionId: '2'});
+  });
+
+  test('without an ISBN the dialog names title and author, and Yes opens the edition picker before anything is written', async () => {
+    const t = setup({list: []});
+    t.hc.fetchBookDetail.mockImplementation(async () => ({...apiBook, contributions: [{author: {name: 'Frank Herbert'}}]}));
+    const r: any = await t.api.load();
+    expect(t.dialog).toHaveBeenCalledWith(expect.stringContaining('"Dune" by Frank Herbert is not in your Hardcover library.'), 'No', 'Yes', false);
+    expect(r.pick).toMatchObject({bookId: 5, editions: [{id: '1', pages: 300}]});
+    expect(t.hc.addOwned).not.toHaveBeenCalled(); // a Cancel in the picker ends here
+    expect(t.store.get(PATH)?.linked).toBeUndefined();
+
+    added(t, 1, 300);
+    await t.api.addToLibrary({bookId: 5, editionId: '1'});
+    expect(t.hc.addOwned).toHaveBeenCalledWith(t.auth, 5, 1); // owned and on the new entry (addOwned)
+    expect(t.store.get(PATH)).toMatchObject({edition: {id: 1, pages: 300}, linked: {bookId: 5, editionId: 1}});
+    const again: any = await t.api.load(); // the reload shows the library book, with no second dialog
+    expect(again.book).toMatchObject({inLibrary: true, editionId: '1'});
+    expect(t.dialog).toHaveBeenCalledTimes(1);
+  });
+
+  test('no automatic match opens the book search with title and author; a picked hit goes on with the dialog and the picker', async () => {
+    const t = setup({list: []});
+    t.hc.searchBooks.mockResolvedValue([]);
+    expect(await t.api.load()).toEqual({search: 'Dune Frank Herbert'});
+    t.hc.searchBooks.mockResolvedValue([{bookId: 7, title: 'Other', authors: ['X']}]);
+    expect(await t.api.searchBooks('other')).toEqual([{bookId: 7, title: 'Other', authors: ['X']}]);
+    expect(await t.api.pickBook(7)).toMatchObject({pick: {bookId: 7}});
+    expect(t.dialog).toHaveBeenCalledTimes(1);
+
+    added(t, 1, 300);
+    await t.api.addToLibrary({bookId: 7, editionId: '1'});
+    expect(t.hc.addOwned).toHaveBeenCalledWith(t.auth, 7, 1);
+    t.hc.searchBooks.mockClear();
+    const r: any = await t.api.load(); // found through the saved link: the title would never match
     expect(r.book.inLibrary).toBe(true);
+    expect(t.hc.searchBooks).not.toHaveBeenCalled();
+  });
+
+  test('a picked hit answered with No is linked, and pickBook says to reload', async () => {
+    const t = setup({list: [], dialogYes: false});
+    t.hc.searchBooks.mockResolvedValue([]);
+    await t.api.load();
+    expect(await t.api.pickBook(7)).toBeNull();
+    expect(t.store.get(PATH).linked).toEqual({bookId: 7});
+  });
+
+  test('a book with no edition that has pages is never linked: the match falls to the search, a pick is refused', async () => {
+    const t = setup({list: []});
+    t.hc.fetchBookDetail.mockImplementation(async () => ({...apiBook, editions: [{id: 3, pages: null, audioSeconds: 99}]}));
+    expect(await t.api.load()).toEqual({search: 'Dune Frank Herbert'});
+    await expect(t.api.pickBook(7)).rejects.toThrow('no edition with a page count');
+    expect(t.dialog).not.toHaveBeenCalled();
+    expect(t.store.get(PATH)?.linked).toBeUndefined();
+  });
+
+  test('an EPUB whose title cannot be read keeps its own message', async () => {
+    const t = setup({list: []});
+    t.store.set(PATH, {ids: [], failed: true});
+    expect(await t.api.load()).toEqual({message: "Could not read this EPUB's title and author."});
   });
 
   test('a No keeps the link: the page shows the book without library features', async () => {
@@ -145,8 +209,8 @@ describe('add to library', () => {
     await t.api.load();
     t.hc.addOwned.mockImplementation(async () => (t.hc.fetchUserBookForBook.mockResolvedValue(item()), {id: 1, pages: 300}));
     await t.api.addToLibrary();
-    expect(t.hc.addOwned).toHaveBeenCalledWith(t.auth, 5, undefined);
-    expect(t.store.get(PATH).linked).toBeUndefined();
+    expect(t.hc.addOwned).toHaveBeenCalledWith(t.auth, 5, 1); // the file's edition (load saved the default)
+    expect(t.store.get(PATH).linked).toEqual({bookId: 5, editionId: 1}); // kept: the next load finds the entry through it
     expect(t.tracking.tracker.forget).toHaveBeenCalledWith(PATH);
   });
 });
