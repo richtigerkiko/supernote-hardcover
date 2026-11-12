@@ -1,5 +1,5 @@
 /**
- * Root component, shown when the Hardcover button opens the plugin view (full screen on the Nomad). src/plugin.ts hands over
+ * Root component, shown when the Hardcover button opens the plugin view (full screen; sizes are Nomad dp, scaled to other windows by Scaled in theme.tsx). src/plugin.ts hands over
  * the data and actions through src/page/session.ts. Under the emulator's fake SDK (Metro with SN_FAKE_SDK=1, see the
  * workspace CLAUDE.md) it shows mock data instead, to design the page at the Nomad's real size.
  *
@@ -7,7 +7,7 @@
  */
 
 import React, {useEffect, useState} from 'react';
-import {View} from 'react-native';
+import {useWindowDimensions, View} from 'react-native';
 import DetailPage from './DetailPage';
 import JournalPage from './JournalPage';
 import Message from './Message';
@@ -15,8 +15,19 @@ import ReviewPage from './ReviewPage';
 import {MOCK_BOOK, MOCK_LONG, MOCK_REVIEWS} from './preview/mockBook';
 import {BLANK_REVIEW, type BookDetail, type Review} from '../core/types';
 import {session} from '../page/session';
+import {log} from '../core/util';
+import {Scaled, windowFacts} from './theme';
 
 export default function App(): React.JSX.Element {
+  return (
+    <Scaled>
+      <AppInner />
+    </Scaled>
+  );
+}
+
+function AppInner(): React.JSX.Element {
+  const win = useWindowDimensions();
   const [preview, setPreview] = useState<boolean | null>(null);
   const [tracking, setTracking] = useState(false); // per document, off until switched on for the open book
   const [syncNote, setSyncNote] = useState('');
@@ -31,6 +42,8 @@ export default function App(): React.JSX.Element {
 
   useEffect(() => {
     session.isFakeSdk().then(setPreview, () => setPreview(false));
+    // For tester reports from other models (see CLAUDE.md "Other models").
+    session.deviceType().then(t => log('window', windowFacts(win), 'device type', t), () => log('window', windowFacts(win), 'device type unknown'));
   }, []);
 
   // On the device: load the open book now, and again on every press of the toolbar button (the view stays mounted).
