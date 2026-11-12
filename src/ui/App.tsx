@@ -44,6 +44,7 @@ function AppInner(): React.JSX.Element {
     session.isFakeSdk().then(setPreview, () => setPreview(false));
     // For tester reports from other models (see CLAUDE.md "Other models").
     session.deviceType().then(t => log('window', windowFacts(win), 'device type', t), () => log('window', windowFacts(win), 'device type unknown'));
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the window facts are logged once, at mount
   }, []);
 
   // On the device: load the open book now, and again on every press of the toolbar button (the view stays mounted).
