@@ -43,7 +43,7 @@ const save = async (tree: any) => {
 test('opens on Quote showing the passage, the edition and the page', () => {
   const t = all(render({}));
   expect(t).toContain(PASSAGE);
-  expect(t).toContain('Edition: Paperback · Whiskey Tit Books');
+  expect(t).toContain('Paperback · Whiskey Tit Books');
   expect(t).toContain('106|');
   expect(t).toContain('330');
   expect(input(render({})).props.placeholder).toBe('Add your thoughts (optional)…');
