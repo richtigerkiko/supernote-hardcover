@@ -52,6 +52,8 @@ export interface Session {
   isFakeSdk: () => Promise<boolean>;
   deviceType: () => Promise<number>; // SDK getDeviceType: 0 A5, 1 A6, 2 A6X, 3 A5X, 4 Nomad, 5 Manta
   close: () => void;
+  /** plugin.ts calls it when a Yes/No dialog opens (true) and closes (false); the page stops its loading wait meanwhile. */
+  asking: (open: boolean) => void;
 }
 
 const listeners = new Set<() => void>();
@@ -68,4 +70,5 @@ export const session: Session = {
   isFakeSdk: async () => false,
   deviceType: async () => -1,
   close: () => {},
+  asking: () => {},
 };

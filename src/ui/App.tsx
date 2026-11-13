@@ -50,7 +50,7 @@ function AppInner(): React.JSX.Element {
   const [busy, setBusy] = useState(true);
   const [slow, setSlow] = useState(''); // set: the loading screen with this text
   const [shown, setShown] = useState(0); // counts the results shown: the page's key, so every result starts a fresh page
-  const wait = useRef({since: 0, up: false, timer: undefined as ReturnType<typeof setTimeout> | undefined});
+  const wait = useRef({since: 0, up: false, text: '', timer: undefined as ReturnType<typeof setTimeout> | undefined});
 
   const startWait = useCallback((text: string) => {
     const w = wait.current;
@@ -59,6 +59,7 @@ function AppInner(): React.JSX.Element {
     const now = Date.now();
     // A running wait goes on. One that is too old without its screen never fired: timers stop when the view closes.
     if (!w.since || now - w.since >= SLOW_MS) w.since = now;
+    w.text = text;
     w.timer = setTimeout(() => {
       w.up = true;
       setSlow(text);
@@ -91,6 +92,21 @@ function AppInner(): React.JSX.Element {
     });
   }, []);
   useEffect(() => () => clearTimeout(wait.current.timer), []);
+  // A Yes/No dialog inside a load or add step is the reader's time, not waiting: the wait stops while it is open and
+  // starts again when it closes, so no loading screen is drawn behind the dialog.
+  useEffect(() => {
+    session.asking = open => {
+      const w = wait.current;
+      if (!w.since || w.up) return;
+      clearTimeout(w.timer);
+      if (open) return;
+      w.since = 0;
+      startWait(w.text);
+    };
+    return () => {
+      session.asking = () => {};
+    };
+  }, [startWait]);
 
   // Dev only: one line per commit, to count screen updates per press (#102).
   useEffect(() => {

@@ -123,3 +123,19 @@ test('a fast add goes from the picker straight to the book', async () => {
   expect(texts(tree)).toContain(MOCK_BOOK.title);
   expect(texts(tree)).not.toContain('Loading…');
 });
+
+test('the time a Yes/No dialog is open does not count toward the loading screen', async () => {
+  const {load, answer} = deferred();
+  await open({load});
+  await later(SLOW_MS - 1);
+  act(() => session.asking(true)); // load() asks "Add it to your library?"
+  await later(SLOW_MS * 3);
+  expect(texts(tree)).not.toContain('Loading…');
+  act(() => session.asking(false));
+  await later(SLOW_MS - 1);
+  expect(texts(tree)).not.toContain('Loading…');
+  await later(1);
+  expect(texts(tree)).toContain('Loading…');
+  await answer(0, bookResult());
+  expect(texts(tree)).toContain(MOCK_BOOK.title);
+});
