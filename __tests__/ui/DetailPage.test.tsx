@@ -2,6 +2,7 @@ import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 import DetailPage from '../../src/ui/DetailPage';
 import {MOCK_BOOK, MOCK_LONG} from '../../src/ui/preview/mockBook';
+import {SLOW_MS} from '../../src/ui/theme';
 
 const texts = (node: any): string[] => {
   const out: string[] = [];
@@ -154,7 +155,7 @@ describe('reviews tab', () => {
     expect(onLoadReviews).not.toHaveBeenCalled();
     expect(tree.root.findByProps({accessibilityLabel: 'Book info tab'}).props.accessibilityState.selected).toBe(true); // default tab
     press(tree, 'Reviews tab');
-    expect(all(tree)).toContain('Loading reviews…');
+    expect(all(tree)).not.toContain('Loading reviews…'); // a fast load shows no loading line (#102)
     await flush();
     press(tree, 'Book info tab');
     press(tree, 'Reviews tab');
@@ -165,6 +166,25 @@ describe('reviews tab', () => {
     expect(t).toContain('★★★★½');
     expect(t).toContain('Contains spoilers');
     expect(t).not.toContain('SECRET'); // a spoiler's text is not in the list
+  });
+
+  test('"Loading reviews…" shows only when the load takes longer than SLOW_MS, and a second tap does not load twice', async () => {
+    jest.useFakeTimers();
+    let answer!: (v: unknown) => void;
+    const onLoadReviews = jest.fn(() => new Promise<any>(ok => (answer = ok)));
+    const tree = render({onLoadReviews});
+    press(tree, 'Reviews tab');
+    act(() => void jest.advanceTimersByTime(SLOW_MS - 1));
+    expect(all(tree)).not.toContain('Loading reviews…');
+    press(tree, 'Book info tab');
+    press(tree, 'Reviews tab');
+    act(() => void jest.advanceTimersByTime(1));
+    expect(all(tree)).toContain('Loading reviews…');
+    await act(async () => answer({reviews: [rev(1)], hasMore: false}));
+    expect(all(tree)).not.toContain('Loading reviews…');
+    expect(all(tree)).toContain('User1');
+    expect(onLoadReviews).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
   });
 
   test('error shows Retry, empty shows a message, Load more asks for the next offset', async () => {

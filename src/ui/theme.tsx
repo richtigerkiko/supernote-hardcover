@@ -1,7 +1,7 @@
 // "Quiet page": the colours, styles and small parts every page shares. E-ink: black on white, 1 px hairlines between rows,
 // rounded outlines only where something is pressed or typed into, one grey for pills, serif for the book's own words.
 import React from 'react';
-import {PixelRatio, Pressable, StyleSheet, Text, useWindowDimensions, View} from 'react-native';
+import {PixelRatio, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type ScrollViewProps} from 'react-native';
 
 export const BLACK = '#000000';
 export const WHITE = '#ffffff';
@@ -10,6 +10,9 @@ export const WHITE = '#ffffff';
 export const GREY = '#d9d9d9';
 // Android's "serif" family is Noto Serif on the Nomad (/system/etc/fonts.xml, checked 2026-11-12), so no font is bundled.
 export const SERIF = 'serif';
+// Every screen change costs power on e-ink and can flicker (#102), so a wait shows nothing new until it is this old:
+// the page that is there stays, and only a longer wait gets a "Loading…".
+export const SLOW_MS = 3000;
 
 export const shared = StyleSheet.create({
   page: {flex: 1, backgroundColor: WHITE},
@@ -45,6 +48,9 @@ export const shared = StyleSheet.create({
   chevron: {width: 13, height: 13, borderLeftWidth: 2.5, borderBottomWidth: 2.5, borderColor: BLACK},
   crossBar: {position: 'absolute', width: 26, height: 2.5, backgroundColor: BLACK},
 });
+
+// Every scrolling area: no overscroll glow and no fading scroll bar, both are animations (many small e-ink updates).
+export const Scroll = (props: ScrollViewProps) => <ScrollView overScrollMode="never" showsVerticalScrollIndicator={false} {...props} />;
 
 const TURN = {left: '45deg', down: '-45deg', right: '-135deg'};
 export const Chevron = ({dir}: {dir: keyof typeof TURN}) => <View style={[shared.chevron, {transform: [{rotate: TURN[dir]}]}]} />;
