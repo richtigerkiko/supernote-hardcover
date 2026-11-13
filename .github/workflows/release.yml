@@ -26,7 +26,7 @@ jobs:
           [ -n "$v" ] || echo "no releasing commits (feat, fix, perf, breaking), skipping"
       - if: steps.ver.outputs.version != ''
         uses: actions/setup-node@v4
-        with: { node-version: 20 }
+        with: { node-version: 22 }
       - if: steps.ver.outputs.version != ''
         uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }

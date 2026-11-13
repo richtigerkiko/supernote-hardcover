@@ -10,8 +10,8 @@ export const SCOPES = ['read:me:content', 'read:library', 'write:library', 'read
 
 export const hasScope = (granted: string | undefined, scope: string): boolean => (granted ?? '').split(/\s+/).includes(scope);
 
-// Tokens in a JsonFile (the plugin's private directory). Reads hand out copies so the session never sees a stored
-// object change under it. Without the native module the tokens live in memory and a restart signs out.
+// Tokens in a JsonFile (the tokens row of the SQLite database in the plugin's private directory). Reads hand out copies so the session never sees a stored
+// object change under it. Without the database the tokens live in memory and a restart signs out.
 export function fileTokenStore(file: () => Promise<JsonFile<Partial<TokenSet>>>): TokenStore {
   return {
     async get() {

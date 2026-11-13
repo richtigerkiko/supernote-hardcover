@@ -27,7 +27,7 @@ PluginManager.init();
 const DEBUG_GESTURES = false;
 
 // Sign-in: OAuth device grant, public client (the id is all the package holds). The session keeps the tokens in
-// tokens.json in the private directory, refreshes from the next call after expiry (no timer) and replays a 401 once.
+// the tokens table of the SQLite database in the private directory, refreshes from the next call after expiry (no timer) and replays a 401 once.
 const auth = new OAuthSession({clientId: CLIENT_ID, store: fileTokenStore(tokenFile), onSignedOut: () => tracking.stop()});
 const meta = createMeta({read: readEpubMeta, cache: metaCache});
 const library = createLibrary({auth, hc, meta, dialog});
