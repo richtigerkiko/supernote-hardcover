@@ -1,7 +1,7 @@
 import React, {useState} from 'react';
-import {Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import {Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
 import type {BookDetail, Entry, Privacy} from '../core/types';
-import {BLACK, Button, Chevron, Options, Tabs, TopBar, shared} from './theme';
+import {BLACK, Button, Chevron, Options, Tabs, Scroll, TopBar, shared} from './theme';
 import EditionPicker, {edLine1} from './EditionPicker';
 
 // "Add journal entry" page (quote or note), presentational like DetailPage: no SDK, everything arrives as props.
@@ -78,7 +78,7 @@ export default function JournalPage({book, passage, onSetEdition, onSave, onClos
   return (
     <View style={shared.page}>
       <TopBar icon="close" title="Add journal entry" onPress={onClose} />
-      <ScrollView style={styles.fill} keyboardShouldPersistTaps="handled" contentContainerStyle={[shared.body, styles.body, {paddingTop: 0}]}>
+      <Scroll style={styles.fill} keyboardShouldPersistTaps="handled" contentContainerStyle={[shared.body, styles.body, {paddingTop: 0}]}>
         <Tabs
           options={[
             ['quote', 'Quote'],
@@ -142,7 +142,7 @@ export default function JournalPage({book, passage, onSetEdition, onSave, onClos
           <Options options={PRIVACY} value={privacy} onPick={setPrivacy} disabled={busy} />
         </View>
         {state === 'error' ? <Text style={[shared.text, shared.bold]}>{error}</Text> : null}
-      </ScrollView>
+      </Scroll>
       <View style={shared.actions}>
         <Button label={busy ? 'Saving…' : state === 'error' ? 'Retry' : 'Save'} accessibilityLabel="Save" solid disabled={busy || empty} onPress={save} />
       </View>
