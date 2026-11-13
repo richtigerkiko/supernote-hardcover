@@ -1,6 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import {STATUSES, type BookDetail, type JournalItem, type Privacy, type PublicReview} from '../core/types';
 import {splitEntry} from '../core/journal';
+import {log} from '../core/util';
 import {Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import EditionPicker, {Item} from './EditionPicker';
 import {BLACK, Button, Chevron, Link, Options, Pill, SERIF, Tabs, TopBar, WHITE, shared} from './theme';
@@ -293,6 +294,11 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
   const [openReview, setOpenReview] = useState<PublicReview | null>(null);
   const [jn, setJn] = useState<Journal>(NO_JOURNAL);
   const [editing, setEditing] = useState<JournalItem | null>(null);
+
+  // Dev only: one line per commit, to count screen updates per press (#102).
+  useEffect(() => {
+    if (__DEV__) log('commit DetailPage');
+  });
 
   useEffect(() => {
     setTab('about'); // another book was loaded

@@ -46,6 +46,11 @@ function AppInner(): React.JSX.Element {
   const [journal, setJournal] = useState<{passage: string} | null>(null); // set: the hardcover-select page is shown
   const [review, setReview] = useState<Review | null>(null); // set: the review card is shown, starting from this
 
+  // Dev only: one line per commit, to count screen updates per press (#102).
+  useEffect(() => {
+    if (__DEV__) log('commit App');
+  });
+
   useEffect(() => {
     session.isFakeSdk().then(setPreview, () => setPreview(false));
     // For tester reports from other models (see CLAUDE.md "Other models").
