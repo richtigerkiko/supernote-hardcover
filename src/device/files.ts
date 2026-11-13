@@ -33,12 +33,16 @@ const database = () =>
   (db ??= (async () => {
     try {
       const dir = await PluginManager.getPluginDirPath();
-      if (!dir || !NativeModules.SQLite) return null;
+      if (!dir || !NativeModules.SQLite) {
+        log('no database (SQLite module or private directory missing), memory only');
+        return null;
+      }
       SQLite.enablePromise(true);
       const handle = await SQLite.openDatabase({name: 'hardcover.db', location: dir + '/'});
       const d: Db = {exec: (sql, params = []) => handle.executeSql(sql, params).then(([r]) => r.rows.raw())};
       // tokens.json and meta-cache.json from before SQLite are imported once, then deleted
       await prepareDb(d, native && {read: name => native.readTextFile(`${dir}/${name}`), remove: name => native.deleteFile(`${dir}/${name}`)});
+      log('database ok');
       return d;
     } catch (e) {
       log('no database, memory only', String(e));
