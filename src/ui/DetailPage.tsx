@@ -2,7 +2,7 @@ import React, {useEffect, useState} from 'react';
 import {STATUSES, type BookDetail, type JournalItem, type Privacy, type PublicReview} from '../core/types';
 import {splitEntry} from '../core/journal';
 import {log} from '../core/util';
-import {Image, Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
+import {Image, Pressable, StyleSheet, Text, TextInput, View, unstable_batchedUpdates as batch} from 'react-native';
 import EditionPicker, {Item} from './EditionPicker';
 import {BLACK, Button, Chevron, Link, Options, Pill, Scroll, SERIF, SLOW_MS, Tabs, TopBar, WHITE, shared} from './theme';
 import {PRIVACY, privacyName} from './JournalPage';
@@ -331,8 +331,10 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
       const likes = await onLikeReview(r.id, on).catch(() => null);
       if (likes == null) return;
       const set = (x: PublicReview) => (x.id === r.id ? {...x, likes, liked: on} : x);
-      setRv(v => ({...v, items: v.items.map(set)}));
-      setOpenReview(o => o && set(o));
+      batch(() => {
+        setRv(v => ({...v, items: v.items.map(set)}));
+        setOpenReview(o => o && set(o));
+      });
     });
   const showReviews = () => {
     setTab('reviews');
@@ -547,8 +549,10 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
           onClose={() => setEditing(null)}
           onSave={async (text, privacy) => {
             const entry = await onEditJournal!(editing, text, privacy);
-            setJn(x => ({...x, items: x.items.map(i => (i.id === editing.id ? {...i, entry, privacy} : i))}));
-            setEditing(null);
+            batch(() => {
+              setJn(x => ({...x, items: x.items.map(i => (i.id === editing.id ? {...i, entry, privacy} : i))}));
+              setEditing(null);
+            });
           }}
         />
       ) : null}

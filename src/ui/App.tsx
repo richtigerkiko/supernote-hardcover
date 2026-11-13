@@ -7,7 +7,7 @@
  */
 
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {useWindowDimensions, View} from 'react-native';
+import {unstable_batchedUpdates as batch, useWindowDimensions, View} from 'react-native';
 import BookSearch from './BookSearch';
 import DetailPage from './DetailPage';
 import EditionPicker from './EditionPicker';
@@ -66,27 +66,29 @@ function AppInner(): React.JSX.Element {
     setBusy(true);
   }, []);
 
-  // What a finished load or add step shows. One update: React batches these also in a promise callback (measured on the
-  // Nomad, 2026-11-13: one App commit per load result), so no unstable_batchedUpdates is needed.
+  // What a finished load or add step shows, in one update. Batched by hand: on the old architecture React commits every
+  // state change made outside an event on its own (measured on the Nomad, 2026-11-13: three App commits per result).
   const show = useCallback((p: {book?: BookDetail; tracking?: boolean; sync?: string; message?: string; signIn?: boolean; failed?: boolean; ask?: Ask; journal?: {passage: string}}) => {
     const w = wait.current;
     clearTimeout(w.timer);
     w.since = 0;
     w.up = false;
-    setBusy(false);
-    setSlow('');
-    setShown(n => n + 1);
-    setBook(p.book ?? null);
-    setTracking(!!p.tracking);
-    setSyncNote(p.sync ?? '');
-    setMessage(p.message ?? '');
-    setCanSignIn(!!p.signIn);
-    setFailed(!!p.failed);
-    setAsk(p.ask ?? null);
-    setJournal(p.journal ?? null);
-    setReview(null);
-    setQr('');
-    setCode(undefined);
+    batch(() => {
+      setBusy(false);
+      setSlow('');
+      setShown(n => n + 1);
+      setBook(p.book ?? null);
+      setTracking(!!p.tracking);
+      setSyncNote(p.sync ?? '');
+      setMessage(p.message ?? '');
+      setCanSignIn(!!p.signIn);
+      setFailed(!!p.failed);
+      setAsk(p.ask ?? null);
+      setJournal(p.journal ?? null);
+      setReview(null);
+      setQr('');
+      setCode(undefined);
+    });
   }, []);
   useEffect(() => () => clearTimeout(wait.current.timer), []);
 
@@ -134,14 +136,16 @@ function AppInner(): React.JSX.Element {
     const on = !tracking;
     setTracking(on);
     session.api?.setTracking(on).then(
-      r => {
-        setSyncNote(r.sync);
-        if (r.status) setBook(b => (b ? {...b, status: r.status!} : b));
-      },
-      (e: any) => {
-        setTracking(!on);
-        setSyncNote(`Could not turn tracking ${on ? 'on' : 'off'}: ${msg(e)}`);
-      },
+      r =>
+        batch(() => {
+          setSyncNote(r.sync);
+          if (r.status) setBook(b => (b ? {...b, status: r.status!} : b));
+        }),
+      (e: any) =>
+        batch(() => {
+          setTracking(!on);
+          setSyncNote(`Could not turn tracking ${on ? 'on' : 'off'}: ${msg(e)}`);
+        }),
     );
   };
   // editionSaved is set only after the plugin accepted the edition.
@@ -193,18 +197,21 @@ function AppInner(): React.JSX.Element {
     if (signingIn) return;
     setSigningIn(true);
     session.api!
-      .signIn((uri, userCode, link) => {
-        setQr(link);
-        setCode({uri, code: userCode});
-      })
+      .signIn((uri, userCode, link) =>
+        batch(() => {
+          setQr(link);
+          setCode({uri, code: userCode});
+        }),
+      )
       .then(
         ok => ok && session.opened(), // reload: the account is connected now (false: cancelled by a reload)
-        (e: any) => {
-          setQr('');
-          setCode(undefined);
-          setMessage(`Sign-in failed: ${String(e?.message ?? e)}`);
-          setCanSignIn(true);
-        },
+        (e: any) =>
+          batch(() => {
+            setQr('');
+            setCode(undefined);
+            setMessage(`Sign-in failed: ${String(e?.message ?? e)}`);
+            setCanSignIn(true);
+          }),
       )
       .finally(() => setSigningIn(false));
   };
@@ -279,10 +286,11 @@ function AppInner(): React.JSX.Element {
           setBook({...book, status});
           session.api?.setStatus(status).then(
             s => setSyncNote(s),
-            (e: any) => {
-              setBook(b => (b ? {...b, status: before} : b));
-              setSyncNote(`Could not change the status: ${msg(e)}`);
-            },
+            (e: any) =>
+              batch(() => {
+                setBook(b => (b ? {...b, status: before} : b));
+                setSyncNote(`Could not change the status: ${msg(e)}`);
+              }),
           );
         }}
         onSetEdition={editionId => pickEdition(editionId, book)}
