@@ -2,11 +2,11 @@
 
 How to build, test and release the plugin. To install and use it, see the [README](../README.md).
 
-The plugin is a React Native app (TypeScript) built on Supernote's `sn-plugin-lib`, with a small Kotlin native module for file writes. It talks to Hardcover through `@hardcover/sdk`.
+The plugin is a React Native app (TypeScript) built on Supernote's `sn-plugin-lib`, with a small native module (file read, delete, stat) and a SQLite database (`react-native-sqlite-storage`, vendored in `node_change/`) for the sign-in tokens and the per-file data. It talks to Hardcover through `@hardcover/sdk`.
 
 ## Prerequisites
 
-- Node 18 or newer (CI uses 20)
+- Node 22.13 or newer (the store tests use `node:sqlite`; CI uses 22)
 - JDK 17
 - Android SDK with platform 35, build-tools 35.0.0 and NDK 27.1.12297006
 - A Hardcover OAuth client id (below)
@@ -52,7 +52,7 @@ node scripts/write-client-id.js
 bash scripts/buildPlugin.sh
 ```
 
-Both write `build/outputs/supernote-hardcover.snplg`, about 7 MB. A package well under 1 MB has no native module (`app.npk`) in it and will not work: the Gradle step failed, so check its output.
+Both write `build/outputs/supernote-hardcover.snplg`, about 7 MB. A package well under 1 MB has no native code (`app.npk`: the `HardcoverNative` module and the SQLite package) in it and will not work: the Gradle step failed, so check its output.
 
 ## Install your build on a device
 
@@ -75,12 +75,13 @@ Note that `adb shell input tap` does not reach the plugin's touch listener, so p
 | Path | What is in it |
 |---|---|
 | `index.js`, `src/plugin.ts` | Entry point; boot and wiring. |
-| `src/device/` | The only code that touches the Supernote SDK and the native module: reading the open document, permissions, files. |
+| `src/device/` | The only code that touches the Supernote SDK and the native module: reading the open document, permissions, files, the SQLite database. |
 | `src/hardcover/` | The Hardcover API client and sign-in. |
 | `src/core/` | Pure logic and shared types: EPUB metadata (a PDF has none: the reader picks book and edition), book matching, the progress tracker, journal and quote formatting. |
 | `src/page/` | What the plugin does for the pages, built with injected dependencies so tests can pass fakes. |
 | `src/ui/` | The pages (book page, journal, review, edition picker, messages) and the theme. Never imports the SDK. |
-| `android/` | The React Native host app and the `HardcoverNative` module (file read, write, stat). |
+| `android/` | The React Native host app and the `HardcoverNative` module (file read, delete, stat). |
+| `node_change/` | The vendored, Android-only `react-native-sqlite-storage` (patched so the database opens in the plugin's private directory). |
 | `__tests__/` | Jest tests, mirroring `src/`. |
 | `scripts/` | Build scripts, `write-client-id.js`, `next-version.js` (release versions). |
 

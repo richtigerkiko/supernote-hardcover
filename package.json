@@ -15,6 +15,7 @@
     "qrcode-generator": "2.0.4",
     "react": "19.0.0",
     "react-native": "0.79.2",
+    "react-native-sqlite-storage": "file:./node_change/react-native-sqlite-storage",
     "sn-plugin-lib": "^0.1.19"
   },
   "devDependencies": {
@@ -37,6 +38,6 @@
     "typescript": "5.0.4"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22.13"
   }
 }
