@@ -20,6 +20,8 @@ function deferred() {
   return {load, calls, answer: (i: number, v: unknown) => act(async () => calls[i].resolve(v))};
 }
 
+// the Release job runs jest next to the build: the first full render took more than the default 5 s there
+jest.setTimeout(30000);
 let tree: any;
 async function open(api: any) {
   session.api = api;
