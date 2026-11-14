@@ -55,8 +55,8 @@ jobs:
             /usr/local/lib/android/sdk/platforms/android-35
           key: android-sdk-35-ndk-27.1.12297006
       - if: steps.ver.outputs.version != ''
-        name: Install Android platform, build-tools and NDK
-        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0" "ndk;27.1.12297006"
+        name: Install Android platform, build-tools, NDK and CMake
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0" "ndk;27.1.12297006" "cmake;3.22.1"
       - if: steps.ver.outputs.version != ''
         name: Build
         env:
