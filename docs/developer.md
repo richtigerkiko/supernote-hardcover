@@ -2,13 +2,13 @@
 
 How to build, test and release the plugin. To install and use it, see the [README](../README.md).
 
-The plugin is a React Native app (TypeScript) built on Supernote's `sn-plugin-lib`, with a small native module (file read, delete, stat) and a SQLite database (`react-native-sqlite-storage`, vendored in `node_change/`) for the sign-in tokens and the per-file data. It talks to Hardcover through `@hardcover/sdk`.
+The plugin is a React Native app (TypeScript) built on Supernote's `sn-plugin-lib`, with a small native module (file read, delete, stat) and a SQLite database (`@op-engineering/op-sqlite`)(`react-native-sqlite-storage`, vendored in `node_change/`) for the sign-in tokens and the per-file data. It talks to Hardcover through `@hardcover/sdk`.
 
 ## Prerequisites
 
 - Node 22.13 or newer (the store tests use `node:sqlite`; CI uses 22)
 - JDK 17
-- Android SDK with platform 35, build-tools 35.0.0 and NDK 27.1.12297006
+- Android SDK with platform 35, build-tools 35.0.0, NDK 27.1.12297006 and CMake 3.22.1 (op-sqlite compiles C++)
 - A Hardcover OAuth client id (below)
 - To try it on a device: a Supernote with plugin support and `adb`
 
@@ -81,7 +81,6 @@ Note that `adb shell input tap` does not reach the plugin's touch listener, so p
 | `src/page/` | What the plugin does for the pages, built with injected dependencies so tests can pass fakes. |
 | `src/ui/` | The pages (book page, journal, review, edition picker, messages) and the theme. Never imports the SDK. |
 | `android/` | The React Native host app and the `HardcoverNative` module (file read, delete, stat). |
-| `node_change/` | The vendored, Android-only `react-native-sqlite-storage` (patched so the database opens in the plugin's private directory). |
 | `__tests__/` | Jest tests, mirroring `src/`. |
 | `scripts/` | Build scripts, `write-client-id.js`, `next-version.js` (release versions). |
 

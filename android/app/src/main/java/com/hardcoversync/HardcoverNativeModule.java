@@ -13,7 +13,7 @@ import java.nio.file.Files;
 
 /**
  * The plugin's own native surface: read a text file, delete one, and stat one. Persistent data is in SQLite
- * (react-native-sqlite-storage); read and delete exist for the one-time import of the old JSON files, stat for the
+ * (op-sqlite); read and delete exist for the one-time import of the old JSON files, stat for the
  * size check of the metadata cache. Files under MyStyle or Document need the FILE:READ grant before the first call
  * (the host enforces it even for plain java.io); the plugin's private directory needs none.
  */
