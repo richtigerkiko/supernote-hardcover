@@ -2,7 +2,7 @@
 
 How to build, test and release the plugin. To install and use it, see the [README](../README.md).
 
-The plugin is a React Native app (TypeScript) built on Supernote's `sn-plugin-lib`, with a small native module (file read, delete, stat) and a SQLite database (`@op-engineering/op-sqlite`)(`react-native-sqlite-storage`, vendored in `node_change/`) for the sign-in tokens and the per-file data. It talks to Hardcover through `@hardcover/sdk`.
+The plugin is a React Native app (TypeScript) built on Supernote's `sn-plugin-lib`, with a small native module (file read, delete, stat) and a SQLite database (`@op-engineering/op-sqlite`) for the sign-in tokens and the per-file data. It talks to Hardcover through `@hardcover/sdk`.
 
 ## Prerequisites
 
