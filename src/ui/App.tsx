@@ -50,6 +50,8 @@ function AppInner(): React.JSX.Element {
   const [busy, setBusy] = useState(true);
   const [slow, setSlow] = useState(''); // set: the loading screen with this text
   const [shown, setShown] = useState(0); // counts the results shown: the page's key, so every result starts a fresh page
+  const [blank, setBlank] = useState(false); // the press came from another file than the page shows: nothing until its result
+  const file = useRef('');
   const wait = useRef({since: 0, up: false, text: '', timer: undefined as ReturnType<typeof setTimeout> | undefined});
 
   const startWait = useCallback((text: string) => {
@@ -76,6 +78,7 @@ function AppInner(): React.JSX.Element {
     w.up = false;
     batch(() => {
       setBusy(false);
+      setBlank(false);
       setSlow('');
       setShown(n => n + 1);
       setBook(p.book ?? null);
@@ -127,6 +130,15 @@ function AppInner(): React.JSX.Element {
     const load = () => {
       const mine = ++latest;
       startWait('Loading…');
+      // Another file than last time: the old book's page goes blank at once (read before load() takes the sample).
+      Promise.resolve(session.pending).then(
+        s => {
+          if (!s || mine !== latest) return;
+          if (file.current && s.path !== file.current) setBlank(true);
+          file.current = s.path;
+        },
+        () => {},
+      );
       const isJournal = session.mode === 'journal';
       // The selection is taken only once a book is shown, so a sign-in in between does not lose it.
       Promise.resolve(session.api?.load())
@@ -322,7 +334,7 @@ function AppInner(): React.JSX.Element {
   if (slow) return <Message text={slow} onClose={session.close} />;
   return (
     <View key={shown} style={shared.page} pointerEvents={busy ? 'none' : 'auto'}>
-      {page()}
+      {blank ? null : page()}
     </View>
   );
 }

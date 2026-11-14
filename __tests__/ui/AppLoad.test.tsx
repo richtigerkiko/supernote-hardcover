@@ -55,6 +55,25 @@ test('a fast load shows nothing until the book is there, and a second press keep
   expect(texts(tree)).not.toContain(MOCK_BOOK.title);
 });
 
+test('a press from another file blanks the old book until the new one is there', async () => {
+  const {load, answer} = deferred();
+  session.pending = Promise.resolve({path: '/a.epub', page: 1, total: 2});
+  await open({load});
+  await answer(0, bookResult());
+
+  session.pending = Promise.resolve({path: '/a.epub', page: 1, total: 2});
+  await act(async () => session.opened()); // same file: the page stays
+  expect(texts(tree)).toContain(MOCK_BOOK.title);
+  await answer(1, bookResult());
+
+  session.pending = Promise.resolve({path: '/b.epub', page: 1, total: 2});
+  await act(async () => session.opened());
+  expect(texts(tree)).toEqual([]);
+  await answer(2, bookResult('Another Book'));
+  expect(texts(tree)).toContain('Another Book');
+  session.pending = null;
+});
+
 test('a slow load shows "Loading…" after SLOW_MS, then the book', async () => {
   const {load, answer} = deferred();
   await open({load});
