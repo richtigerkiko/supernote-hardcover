@@ -8,17 +8,14 @@ import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.WritableMap;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 
 /**
- * The SDK and React Native have no file write, so this is the whole native surface of the plugin:
- * read a text file, write one atomically, and stat one. Files under MyStyle or Document need the FILE:READ /
- * FILE:WRITE grant before the first call (the host enforces it even for plain java.io); the plugin's private
- * directory needs none.
+ * The plugin's own native surface: read a text file, delete one, and stat one. Persistent data is in SQLite
+ * (op-sqlite); read and delete exist for the one-time import of the old JSON files, stat for the
+ * size check of the metadata cache. Files under MyStyle or Document need the FILE:READ grant before the first call
+ * (the host enforces it even for plain java.io); the plugin's private directory needs none.
  */
 public class HardcoverNativeModule extends ReactContextBaseJavaModule {
     HardcoverNativeModule(ReactApplicationContext context) {
@@ -45,25 +42,13 @@ public class HardcoverNativeModule extends ReactContextBaseJavaModule {
         }
     }
 
-    /** Writes via a temp file and a rename, so a crash cannot leave a half-written file. Creates parent folders. */
+    /** Deletes a file; false when there was none. Removes the old JSON files after their import into SQLite. */
     @ReactMethod
-    public void writeFile(String path, String content, Promise promise) {
+    public void deleteFile(String path, Promise promise) {
         try {
-            File f = new File(path);
-            File dir = f.getParentFile();
-            if (dir != null && !dir.isDirectory() && !dir.mkdirs() && !dir.isDirectory()) {
-                throw new IOException("cannot create " + dir);
-            }
-            File tmp = new File(path + ".tmp");
-            Files.write(tmp.toPath(), content.getBytes(StandardCharsets.UTF_8));
-            try {
-                Files.move(tmp.toPath(), f.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-            } catch (AtomicMoveNotSupportedException e) {
-                Files.move(tmp.toPath(), f.toPath(), StandardCopyOption.REPLACE_EXISTING);
-            }
-            promise.resolve(true);
+            promise.resolve(Files.deleteIfExists(new File(path).toPath()));
         } catch (Exception e) {
-            promise.reject("WRITE_FAILED", e.getClass().getSimpleName() + ": " + e.getMessage(), e);
+            promise.reject("DELETE_FAILED", e.getClass().getSimpleName() + ": " + e.getMessage(), e);
         }
     }
 

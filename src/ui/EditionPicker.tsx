@@ -1,7 +1,7 @@
 import React, {useState} from 'react';
-import {Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import {Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
 import type {Edition} from '../core/types';
-import {BLACK, WHITE, Button, TopBar, shared} from './theme';
+import {BLACK, WHITE, Button, Scroll, TopBar, shared} from './theme';
 
 // Full-screen "Choose edition" list, shared by the detail page and the journal page. Same e-ink rules as DetailPage.
 
@@ -35,7 +35,7 @@ export default function EditionPicker({editions, editionId, onPick, onClose}: Pr
   const shown = editions.filter(e => !e.audio && e.pages > 0);
   const [choice, setChoice] = useState(shown.some(e => e.id === editionId) ? editionId : (shown[0]?.id ?? '')); // the current one may be hidden
   const hidden = editions.length - shown.length;
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(''); // the search that was submitted: typing alone does not redraw the list (#102)
   const found = shown.filter(e => editionMatches(e, query));
   return (
     <View style={shared.page}>
@@ -43,8 +43,7 @@ export default function EditionPicker({editions, editionId, onPick, onClose}: Pr
       <View style={styles.head}>
         <TextInput
           style={styles.search}
-          value={query}
-          onChangeText={setQuery}
+          onSubmitEditing={e => setQuery(e.nativeEvent.text)}
           accessibilityLabel="Search editions"
           placeholder={`Search ${shown.length} editions`}
           placeholderTextColor={BLACK}
@@ -56,7 +55,7 @@ export default function EditionPicker({editions, editionId, onPick, onClose}: Pr
           {`Pick the edition this file is. Page counts and progress follow it.${hidden ? ` ${hidden} edition${hidden > 1 ? 's' : ''} without a page count hidden.` : ''}`}
         </Text>
       </View>
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.list}>
+      <Scroll keyboardShouldPersistTaps="handled" contentContainerStyle={styles.list}>
         {found.length === 0 ? <Text style={styles.none}>{`No edition matches “${query}”.`}</Text> : null}
         {found.map(e => (
           <Item key={e.id} tall on={e.id === choice} onPress={() => setChoice(e.id)}>
@@ -66,7 +65,7 @@ export default function EditionPicker({editions, editionId, onPick, onClose}: Pr
             <Text style={styles.l2}>{`${edLine2(e)}${e.isbn ? ` · ISBN ${e.isbn}` : ''}`}</Text>
           </Item>
         ))}
-      </ScrollView>
+      </Scroll>
       <View style={shared.actions}>
         <Button label="Cancel" onPress={onClose} />
         <Button

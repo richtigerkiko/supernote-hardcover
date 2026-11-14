@@ -1,8 +1,8 @@
 import React, {useEffect, useRef, useState} from 'react';
-import {ScrollView, Text, TextInput, View} from 'react-native';
+import {Text, TextInput, View} from 'react-native';
 import type {CatalogueBook} from '../core/types';
 import {Item, styles} from './EditionPicker';
-import {BLACK, Button, TopBar, shared} from './theme';
+import {BLACK, Button, Scroll, TopBar, shared} from './theme';
 
 // Full-screen "Find book" list in the edition picker's style, for a file with no automatic match (or one matched to a book with no page counts): a search field that
 // starts with the EPUB's title and author (empty for a PDF), and Hardcover's hits as radio rows. The pick is confirmed with the button
@@ -64,7 +64,7 @@ export default function BookSearch({query, onSearch, onPick, onClose}: Props) {
         </View>
         <Text style={styles.pickNote}>Hardcover has no sure match for this file. Pick the book it is.</Text>
       </View>
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.list}>
+      <Scroll keyboardShouldPersistTaps="handled" contentContainerStyle={styles.list}>
         {hits === null ? <Text style={styles.none}>Searching…</Text> : hits.length === 0 ? <Text style={styles.none}>{error || (searched ? 'No book found' : 'Type the title and author, then tap Search.')}</Text> : null}
         {(hits ?? []).map(h => (
           <Item key={h.bookId} tall on={h.bookId === choice} onPress={() => setChoice(h.bookId)}>
@@ -76,7 +76,7 @@ export default function BookSearch({query, onSearch, onPick, onClose}: Props) {
             </Text>
           </Item>
         ))}
-      </ScrollView>
+      </Scroll>
       <View style={shared.actions}>
         <Button label="Cancel" onPress={onClose} />
         <Button label="Use this book" solid disabled={!choice} onPress={() => onPick(choice)} />

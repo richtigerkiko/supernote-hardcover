@@ -6,7 +6,7 @@ import {OAuthSession} from '@hardcover/sdk/oauth';
 import {name as appName} from '../app.json';
 import CLIENT_ID from './clientId.generated'; // written from the workspace .env by scripts/write-client-id.js
 import {log} from './core/util';
-import {closeView, deviceType, dialog, isFakeSdk} from './device/host';
+import {closeView, deviceType, dialog as hostDialog, isFakeSdk} from './device/host';
 import {metaCache, native, readEpubMeta, tokenFile} from './device/files';
 import {grants} from './device/permissions';
 import {readSelection, safeSample, sample} from './device/reader';
@@ -27,9 +27,18 @@ PluginManager.init();
 const DEBUG_GESTURES = false;
 
 // Sign-in: OAuth device grant, public client (the id is all the package holds). The session keeps the tokens in
-// tokens.json in the private directory, refreshes from the next call after expiry (no timer) and replays a 401 once.
+// the tokens table of the SQLite database in the private directory, refreshes from the next call after expiry (no timer) and replays a 401 once.
 const auth = new OAuthSession({clientId: CLIENT_ID, store: fileTokenStore(tokenFile), onSignedOut: () => tracking.stop()});
 const meta = createMeta({read: readEpubMeta, cache: metaCache});
+// The page's 3 s loading wait does not count the time a dialog is open (session.asking, #102).
+const dialog: typeof hostDialog = async (...a) => {
+  session.asking(true);
+  try {
+    return await hostDialog(...a);
+  } finally {
+    session.asking(false);
+  }
+};
 const library = createLibrary({auth, hc, meta, dialog});
 const tracking = createTracking({auth, hc, meta, library, grants, dialog, sample, enabled: !DEBUG_GESTURES});
 

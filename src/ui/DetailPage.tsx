@@ -1,9 +1,10 @@
 import React, {useEffect, useState} from 'react';
 import {STATUSES, type BookDetail, type JournalItem, type Privacy, type PublicReview} from '../core/types';
 import {splitEntry} from '../core/journal';
-import {Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import {log} from '../core/util';
+import {Image, Pressable, StyleSheet, Text, TextInput, View, unstable_batchedUpdates as batch} from 'react-native';
 import EditionPicker, {Item} from './EditionPicker';
-import {BLACK, Button, Chevron, Link, Options, Pill, SERIF, Tabs, TopBar, WHITE, shared} from './theme';
+import {BLACK, Button, Chevron, Link, Options, Pill, Scroll, SERIF, SLOW_MS, Tabs, TopBar, WHITE, shared} from './theme';
 import {PRIVACY, privacyName} from './JournalPage';
 
 // Book detail page, ported from the "Quiet page" boards of the design artifact. Presentational only: no SDK imports,
@@ -175,7 +176,11 @@ function ReviewEntry({r, onMore, onLike}: {r: PublicReview; onMore: () => void; 
   );
 }
 
-type Reviews = {items: PublicReview[]; hasMore: boolean; loaded: boolean; state: 'idle' | 'loading' | 'error'};
+// 'loading' shows nothing new; only a load older than SLOW_MS is 'slow' and gets its "Loading…" line (#102).
+type LoadState = 'idle' | 'loading' | 'slow' | 'error';
+const slowAfter = <T extends {state: LoadState}>(set: (f: (x: T) => T) => void) => setTimeout(() => set(x => (x.state === 'loading' ? {...x, state: 'slow'} : x)), SLOW_MS);
+
+type Reviews = {items: PublicReview[]; hasMore: boolean; loaded: boolean; state: LoadState};
 const NO_REVIEWS: Reviews = {items: [], hasMore: false, loaded: false, state: 'idle'};
 
 // One note or quote, each part clamped to 3 lines (Edit shows all of it), with Edit (opens the full-screen editor) and Remove (the "cannot be undone" confirmation is inline, so the list stays where it is).
@@ -244,7 +249,7 @@ function JournalEdit({item, book, onSave, onClose}: {item: JournalItem; book: Bo
   return (
     <View style={shared.overlay}>
       <TopBar title={quote ? 'Edit quote' : 'Edit note'} onPress={onClose} />
-      <ScrollView style={styles.flex} keyboardShouldPersistTaps="handled" contentContainerStyle={[shared.body, styles.editBody]}>
+      <Scroll style={styles.flex} keyboardShouldPersistTaps="handled" contentContainerStyle={[shared.body, styles.editBody]}>
         {passage ? (
           // as wide as the quote (or the source line, if that is longer), so the source sits right-justified under the quote itself
           <View style={styles.quoteBlock}>
@@ -271,7 +276,7 @@ function JournalEdit({item, book, onSave, onClose}: {item: JournalItem; book: Bo
           <Options options={PRIVACY} value={privacy} onPick={setPrivacy} disabled={busy} />
         </View>
         {error ? <Text style={[shared.text, shared.bold]}>{error}</Text> : null}
-      </ScrollView>
+      </Scroll>
       <View style={shared.actions}>
         <Button label="Cancel" disabled={busy} onPress={onClose} />
         <Button solid label={busy ? 'Saving…' : error ? 'Retry' : 'Save'} disabled={busy || (!quote && !text.trim())} onPress={save} />
@@ -280,7 +285,7 @@ function JournalEdit({item, book, onSave, onClose}: {item: JournalItem; book: Bo
   );
 }
 
-type Journal = {items: JournalItem[]; hasMore: boolean; loaded: boolean; state: 'idle' | 'loading' | 'error'};
+type Journal = {items: JournalItem[]; hasMore: boolean; loaded: boolean; state: LoadState};
 const NO_JOURNAL: Journal = {items: [], hasMore: false, loaded: false, state: 'idle'};
 
 export default function DetailPage({book, tracking, syncNote, onToggleTracking, onClose, onWriteReview, onSetStatus, onSetEdition, onAddToLibrary, onLoadReviews, onLikeReview, onLoadJournal, onEditJournal, onRemoveJournal}: Props) {
@@ -294,6 +299,11 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
   const [jn, setJn] = useState<Journal>(NO_JOURNAL);
   const [editing, setEditing] = useState<JournalItem | null>(null);
 
+  // Dev only: one line per commit, to count screen updates per press (#102).
+  useEffect(() => {
+    if (__DEV__) log('commit DetailPage');
+  });
+
   useEffect(() => {
     setTab('about'); // another book was loaded
     setRv(NO_REVIEWS);
@@ -303,12 +313,15 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
   }, [book.title]);
 
   const loadReviews = () => {
-    if (!onLoadReviews || rv.state === 'loading') return;
+    if (!onLoadReviews || rv.state === 'loading' || rv.state === 'slow') return;
     setRv(r => ({...r, state: 'loading'}));
-    onLoadReviews(rv.items.length).then(
-      p => setRv(r => ({items: [...r.items, ...p.reviews], hasMore: p.hasMore, loaded: true, state: 'idle'})),
-      () => setRv(r => ({...r, state: 'error'})),
-    );
+    const timer = slowAfter(setRv);
+    onLoadReviews(rv.items.length)
+      .then(
+        p => setRv(r => ({items: [...r.items, ...p.reviews], hasMore: p.hasMore, loaded: true, state: 'idle'})),
+        () => setRv(r => ({...r, state: 'error'})),
+      )
+      .finally(() => clearTimeout(timer));
   };
   // The list and the open review each hold the review, so both get the server's count. A failure changes nothing.
   const like =
@@ -318,8 +331,10 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
       const likes = await onLikeReview(r.id, on).catch(() => null);
       if (likes == null) return;
       const set = (x: PublicReview) => (x.id === r.id ? {...x, likes, liked: on} : x);
-      setRv(v => ({...v, items: v.items.map(set)}));
-      setOpenReview(o => o && set(o));
+      batch(() => {
+        setRv(v => ({...v, items: v.items.map(set)}));
+        setOpenReview(o => o && set(o));
+      });
     });
   const showReviews = () => {
     setTab('reviews');
@@ -327,12 +342,15 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
   };
 
   const loadJournal = () => {
-    if (!onLoadJournal || jn.state === 'loading') return;
+    if (!onLoadJournal || jn.state === 'loading' || jn.state === 'slow') return;
     setJn(j => ({...j, state: 'loading'}));
-    onLoadJournal(jn.items.length).then( // removals delete on the server too, so the next page starts at what is left
-      p => setJn(j => ({items: [...j.items, ...p.entries], hasMore: p.hasMore, loaded: true, state: 'idle'})),
-      () => setJn(j => ({...j, state: 'error'})),
-    );
+    const timer = slowAfter(setJn);
+    onLoadJournal(jn.items.length) // removals delete on the server too, so the next page starts at what is left
+      .then(
+        p => setJn(j => ({items: [...j.items, ...p.entries], hasMore: p.hasMore, loaded: true, state: 'idle'})),
+        () => setJn(j => ({...j, state: 'error'})),
+      )
+      .finally(() => clearTimeout(timer));
   };
   const showJournal = () => {
     setTab('journal');
@@ -344,7 +362,7 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
     return (
       <View style={shared.page}>
         <TopBar title="Reading status" onPress={() => setView('detail')} />
-        <ScrollView contentContainerStyle={styles.statusList}>
+        <Scroll contentContainerStyle={styles.statusList}>
           {STATUSES.map(s => (
             <Item
               key={s}
@@ -356,7 +374,7 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
               <Text style={[styles.statusText, s === book.status && shared.bold]}>{s}</Text>
             </Item>
           ))}
-        </ScrollView>
+        </Scroll>
       </View>
     );
   }
@@ -370,7 +388,7 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
   return (
     <View style={shared.page}>
       <TopBar icon="close" onPress={onClose}>
-        <Image accessibilityLabel="Hardcover" source={require('../../assets/logo.png')} style={styles.logo} />
+        <Image fadeDuration={0} accessibilityLabel="Hardcover" source={require('../../assets/logo.png')} style={styles.logo} />
         {inLibrary ? (
           <Pressable accessibilityRole="switch" accessibilityState={{checked: tracking}} accessibilityLabel="Hardcover tracking" style={styles.tracking} onPress={onToggleTracking}>
             <Text style={shared.text}>{tracking ? 'Tracking on' : 'Tracking off'}</Text>
@@ -381,11 +399,11 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
         ) : null}
       </TopBar>
 
-      <ScrollView style={styles.flex} contentContainerStyle={styles.content}>
+      <Scroll style={styles.flex} contentContainerStyle={styles.content}>
         <View style={styles.header}>
           {book.cover ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Show cover full size" onPress={() => setView('cover')}>
-              <Image source={{uri: book.cover}} style={styles.cover} resizeMode="contain" />
+              <Image fadeDuration={0} source={{uri: book.cover}} style={styles.cover} resizeMode="contain" />
             </Pressable>
           ) : (
             <View style={[styles.cover, styles.noCover]}>
@@ -441,7 +459,7 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
             {rv.items.map(r => (
               <ReviewEntry key={r.id} r={r} onMore={() => setOpenReview(r)} onLike={like} />
             ))}
-            {rv.state === 'loading' ? <Text style={styles.status}>{rv.items.length ? 'Loading more…' : 'Loading reviews…'}</Text> : null}
+            {rv.state === 'slow' ? <Text style={styles.status}>{rv.items.length ? 'Loading more…' : 'Loading reviews…'}</Text> : null}
             {rv.state === 'error' ? (
               <>
                 <Text style={styles.status}>Could not load reviews.</Text>
@@ -449,7 +467,7 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
               </>
             ) : null}
             {rv.loaded && !rv.items.length && rv.state === 'idle' ? <Text style={styles.status}>No reviews yet.</Text> : null}
-            {rv.hasMore && rv.state === 'idle' ? <Link label="Load more" onPress={loadReviews} /> : null}
+            {rv.hasMore && (rv.state === 'idle' || rv.state === 'loading') ? <Link label="Load more" onPress={loadReviews} /> : null}
           </View>
         ) : tab === 'journal' ? (
           <View>
@@ -464,7 +482,7 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
                 }}
               />
             ))}
-            {jn.state === 'loading' ? <Text style={styles.status}>{jn.items.length ? 'Loading more…' : 'Loading journal…'}</Text> : null}
+            {jn.state === 'slow' ? <Text style={styles.status}>{jn.items.length ? 'Loading more…' : 'Loading journal…'}</Text> : null}
             {jn.state === 'error' ? (
               <>
                 <Text style={styles.status}>Could not load the journal.</Text>
@@ -472,7 +490,7 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
               </>
             ) : null}
             {jn.loaded && !jn.items.length && jn.state === 'idle' ? <Text style={styles.status}>No journal entries yet. Select text in the book to save a quote or note.</Text> : null}
-            {jn.hasMore && jn.state === 'idle' ? <Link label="Load more" onPress={loadJournal} /> : null}
+            {jn.hasMore && (jn.state === 'idle' || jn.state === 'loading') ? <Link label="Load more" onPress={loadJournal} /> : null}
           </View>
         ) : (
           <View>
@@ -492,7 +510,7 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
             ) : null}
           </View>
         )}
-      </ScrollView>
+      </Scroll>
 
       <View style={shared.actions}>
         {inLibrary ? (
@@ -509,13 +527,13 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
         // overlay like the cover: the list underneath stays mounted, so Back to reviews lands on the same position
         <View style={shared.overlay}>
           <TopBar title="Review" onPress={() => setOpenReview(null)} />
-          <ScrollView style={styles.flex} contentContainerStyle={shared.body}>
+          <Scroll style={styles.flex} contentContainerStyle={shared.body}>
             <Text style={[styles.small, {marginBottom: 18}]}>{join([book.title, book.authors.join(', ')])}</Text>
             <ReviewHead r={openReview} full onLike={like} />
             <View style={styles.rvFull}>
               <Text style={shared.serif}>{openReview.text}</Text>
             </View>
-          </ScrollView>
+          </Scroll>
           <View style={shared.actions}>
             <Button label="Back to reviews" onPress={() => setOpenReview(null)} />
           </View>
@@ -531,8 +549,10 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
           onClose={() => setEditing(null)}
           onSave={async (text, privacy) => {
             const entry = await onEditJournal!(editing, text, privacy);
-            setJn(x => ({...x, items: x.items.map(i => (i.id === editing.id ? {...i, entry, privacy} : i))}));
-            setEditing(null);
+            batch(() => {
+              setJn(x => ({...x, items: x.items.map(i => (i.id === editing.id ? {...i, entry, privacy} : i))}));
+              setEditing(null);
+            });
           }}
         />
       ) : null}
@@ -541,7 +561,7 @@ export default function DetailPage({book, tracking, syncNote, onToggleTracking, 
         // overlay, not a sub-view: the page underneath stays mounted, so its scroll position survives
         <Pressable accessibilityLabel="Cover full size" style={shared.overlay} onPress={() => setView('detail')}>
           <TopBar icon="close" label="Close cover" onPress={() => setView('detail')} />
-          <Image source={{uri: book.cover}} style={styles.coverFullImg} resizeMode="contain" />
+          <Image fadeDuration={0} source={{uri: book.cover}} style={styles.coverFullImg} resizeMode="contain" />
         </Pressable>
       ) : null}
     </View>

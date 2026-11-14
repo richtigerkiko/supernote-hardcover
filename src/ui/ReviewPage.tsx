@@ -1,7 +1,7 @@
 import React, {useRef, useState} from 'react';
-import {PanResponder, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import {PanResponder, Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
 import {BLANK_REVIEW, type BookDetail, type Review} from '../core/types';
-import {BLACK, Button, SERIF, TopBar, WHITE, shared} from './theme';
+import {BLACK, Button, Scroll, SERIF, TopBar, WHITE, shared} from './theme';
 
 // "Write review" page, presentational like JournalPage: no SDK, everything arrives as props.
 // Quiet page rules (theme.tsx): tap targets of at least 48 dp, text of at least 18 sp.
@@ -106,7 +106,7 @@ export default function ReviewPage({book, initial = BLANK_REVIEW, onSave, onClos
   return (
     <View style={shared.page}>
       <TopBar icon="close" title="Write review" onPress={onClose} />
-      <ScrollView style={styles.flex} keyboardShouldPersistTaps="handled" contentContainerStyle={[shared.body, styles.body]}>
+      <Scroll style={styles.flex} keyboardShouldPersistTaps="handled" contentContainerStyle={[shared.body, styles.body]}>
         <Text style={styles.title} numberOfLines={1}>
           {book.title}
         </Text>
@@ -152,7 +152,7 @@ export default function ReviewPage({book, initial = BLANK_REVIEW, onSave, onClos
             {state === 'error' ? <Text style={[shared.text, shared.bold]}>{error}</Text> : null}
           </>
         )}
-      </ScrollView>
+      </Scroll>
       <View style={shared.actions}>
         {state === 'saved' ? (
           <Button label="Close" solid onPress={onClose} />
